@@ -74,14 +74,14 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound, Eigen::M
 	MatrixXi E(totpts+4, 2);
 	MatrixXd H(0, 2);
 
-	V(0,0) = -1.0;
-	V(0,1) = -1.0;
-	V(1,0) = 1.0;
-	V(1,1) = -1.0;
-	V(2,0) = 1.0;
-	V(2,1) = 1.0;
-	V(3,0) = -1.0;
-	V(3,1) = 1.0;
+	V(0,0) = -0.5;
+	V(0,1) = -0.5;
+	V(1,0) = 0.5;
+	V(1,1) = -0.5;
+	V(2,0) = 0.5;
+	V(2,1) = 0.5;
+	V(3,0) = -0.5;
+	V(3,1) = 0.5;
 	E(0,0) = 0;
 	E(0,1) = 1;
 	E(1,0) = 1;
@@ -126,6 +126,6 @@ void Tile::triangulateSlices(double areaBound,
 		Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces)
 {
-	triangulateSlice(bottom_, -1.0, areaBound, botverts, botfaces);
-	triangulateSlice(top_, 1.0, areaBound, topverts, topfaces);
+	triangulateSlice(bottom_, -0.5, areaBound, botverts, botfaces);
+	triangulateSlice(top_, 0.5, areaBound, topverts, topfaces);
 }
