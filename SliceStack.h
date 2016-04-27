@@ -19,6 +19,8 @@ public:
 		Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces);
 
+  int getSizeAt(int i);
+
 private:
 	int numSlices_;
 	std::vector<Slice *> slices_;

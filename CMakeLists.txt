@@ -54,7 +54,8 @@ endif()
 ### Adding libIGL: choose the path to your local copy libIGL ###
 ### This is going to compile everything you requested ###
 #message(FATAL_ERROR "${PROJECT_SOURCE_DIR}/../libigl/cmake")
-add_subdirectory("${LIBIGL_INCLUDE_DIR}/../shared/cmake" "libigl")
+set(LIBIGL_CMAKE "${LIBIGL_INCLUDE_DIR}/../shared/cmake" CACHE PATH "Path for libigl cmake folder")
+add_subdirectory("${LIBIGL_CMAKE}" "libigl")
 
 ### ligIGL information ###
 message("libIGL includes: ${LIBIGL_INCLUDE_DIRS}")

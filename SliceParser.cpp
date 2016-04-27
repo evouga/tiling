@@ -78,6 +78,7 @@ Slice *readSlice(const char *filename, const char *objectname)
 	if(doc.FirstChildElement("Section")->QueryDoubleAttribute("thickness", &result->thickness) != XML_NO_ERROR)
 	{
 		delete result;
+    printf("Returning NULL from %s:%d\n", __FILE__, __LINE__);
 		return NULL;
 	}
 	return result;
