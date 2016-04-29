@@ -1,5 +1,5 @@
 #ifndef TILE_H
-#define TILE_h
+#define TILE_H
 
 #include <Eigen/Core>
 

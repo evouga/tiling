@@ -27,7 +27,9 @@ int main(int argc, char *argv[])
   Eigen::MatrixXd topverts;
   Eigen::MatrixXi botfaces;
   Eigen::MatrixXi topfaces;
+
   ss.triangulateSlice(good_start, 0.05, botverts, botfaces, topverts, topfaces);
+  ss.tetrahedralizeSlice(botverts, botfaces, topverts, topfaces);
 
   cout << "Triangulated tile contains " << botverts.rows() << " verts on bottom face and " << topverts.rows() << " verts on top face" << endl;  
 
