@@ -21,6 +21,9 @@ public:
 		Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces);
 
+  void triangulateSide (int constantCoord, std::vector<Eigen::Vector3d> &verts,
+    Eigen::MatrixXd &V, Eigen::MatrixXi &F);
+
 	void tetrahedralizeSlice(const Eigen::MatrixXd &botverts,
     const Eigen::MatrixXi &botfaces, const Eigen::MatrixXd &topverts,
     const Eigen::MatrixXi &topfaces);
