@@ -5,11 +5,11 @@
 #include "SliceParser.h"
 #include "Slice.h"
 #include "Tile.h"
+#include "ViewTetMesh.h"
 
 #include <igl/viewer/Viewer.h>
 #include <igl/triangle/triangulate.h>
-// #include <igl/copyleft/tetgen/tetrahedralize.h>
-// #include <igl/copyleft/cgal/remesh_self_intersections.h>
+#include <igl/copyleft/tetgen/tetrahedralize.h>
 
 using namespace std;
 
@@ -81,33 +81,47 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
     sort(topV.rbegin(), topV.rend(), customSortByY);
   }
 
-  Eigen::MatrixXd inputV(verts.size(), 2);
-  Eigen::MatrixXi inputE(verts.size(), 2);
+  // add 5 points to each side
+  Eigen::MatrixXd inputV(verts.size() + 8, 2);
+  Eigen::MatrixXi inputE(verts.size() + 8, 2);
   Eigen::MatrixXd H(0, 2);
 
+  int offset = 0;
+
   for (int i = 0; i < botV.size(); ++i) {
+    cout << offset << " " << inputV.row(offset) << endl;
     if (constantCoord < 2)
-      inputV.row(i) = Eigen::Vector2d(botV[i][1], botV[i][2]);
+      inputV.row(offset++) = Eigen::Vector2d(botV[i][1], botV[i][2]);
     else 
-      inputV.row(i) = Eigen::Vector2d(botV[i][0], botV[i][2]);
+      inputV.row(offset++) = Eigen::Vector2d(botV[i][0], botV[i][2]);
+  }
+
+  for (int i = 1; i < 5; ++i) {
+    cout << offset << " " << inputV.row(offset) << endl;
+    inputV.row(offset++) = Eigen::Vector2d(0.5, -0.5 + 1.0 / 5.0 * i);
   }
 
   for (int i = 0; i < topV.size(); ++i) {
+    cout << offset << " " << inputV.row(offset) << endl;
     if (constantCoord >= 2)
-      inputV(botV.size() + i, 0) = topV[i][0];
+      inputV.row(offset++) = Eigen::Vector2d(topV[i][0], topV[i][2]);
     else
-      inputV(botV.size() + i, 0) = topV[i][1];
-    inputV(botV.size() + i, 1) = topV[i][2];
+      inputV.row(offset++) = Eigen::Vector2d(topV[i][1], topV[i][2]);
   }
 
-  for (int i = 0; i < verts.size(); ++i) {
-    inputE.row(i) = Eigen::Vector2i(i, (i + 1) % (verts.size()));
+  for (int i = 1; i < 5; ++i) {
+    cout << offset << " " << inputV.row(offset) << endl;
+    inputV.row(offset++) = Eigen::Vector2d(-0.5, -0.5 + 1.0 / 5.0 * i);
+  }
+
+  for (int i = 0; i < inputV.rows(); ++i) {
+    inputE.row(i) = Eigen::Vector2i(i, (i + 1) % (inputV.rows()));
   }
 
   Eigen::MatrixXd tmpV;
 
 	cout << "Delaunay triangulating mesh with " << inputV.rows() << " verts" << endl;
-	igl::triangle::triangulate(inputV,inputE,H,"Da0.05q",tmpV,F);	
+	igl::triangle::triangulate(inputV,inputE,H,"DYa0.05q",tmpV,F);	
 	cout << "done" << endl;
 
   V.resize(tmpV.rows(), 3);
@@ -181,11 +195,8 @@ void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::
   Eigen::MatrixXi frontTriF;
 
   triangulateSide(0, leftV, leftTriV, leftTriF);
-
   triangulateSide(2, frontV, frontTriV, frontTriF);
-
   triangulateSide(1, rightV, rightTriV, rightTriF);
-
   triangulateSide(3, backV, backTriV, backTriF);
 
   int totalVertices = topV.rows() + botV.rows() + 
@@ -201,37 +212,27 @@ void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::
 
   // Add the vertices
   for (int i = 0; i < botV.rows(); ++i) {
-    V.row(i) = botV.row(i);
+    V.row(offset++) = botV.row(i);
   }
-
-  offset += botV.rows();
 
   for (int i = 0; i < topV.rows(); ++i) {
-    V.row(offset + i) = topV.row(i);
+    V.row(offset++) = topV.row(i);
   }
-
-  offset += topV.rows();
 
   for (int i = 0; i < leftTriV.rows(); ++i) {
-    V.row(offset + i) = leftTriV.row(i);
+    V.row(offset++) = leftTriV.row(i);
   }
-
-  offset += leftTriV.rows();
 
   for (int i = 0; i < rightTriV.rows(); ++i) {
-    V.row(offset + i) = rightTriV.row(i);
+    V.row(offset++) = rightTriV.row(i);
   }
-
-  offset += rightTriV.rows();
 
   for (int i = 0; i < frontTriV.rows(); ++i) {
-    V.row(offset + i) = frontTriV.row(i);
+    V.row(offset++) = frontTriV.row(i);
   }
 
-  offset += frontTriV.rows();
-
   for (int i = 0; i < backTriV.rows(); ++i) {
-    V.row(offset + i) = backTriV.row(i);
+    V.row(offset++) = backTriV.row(i);
   }
 
   // Add the faces
@@ -239,68 +240,56 @@ void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::
   offset = 0;
 
   for (int i = 0; i < botF.rows(); ++i) {
-    F.row(i) = botF.row(i);
+    F.row(offset++) = botF.row(i);
   }
 
   vertexOffset += Eigen::Vector3i(botV.rows(), botV.rows(), botV.rows());
-  offset += botF.rows();
 
   for (int i = 0; i < topF.rows(); ++i) {
-    F.row(offset + i) = vertexOffset + Eigen::Vector3i(topF.row(i));
+    F.row(offset++) = vertexOffset + Eigen::Vector3i(topF.row(i));
   }
 
   vertexOffset += Eigen::Vector3i(topV.rows(), topV.rows(), topV.rows());
-  offset += topF.rows();
 
   for (int i = 0; i < leftTriF.rows(); ++i) {
-    F.row(offset + i) = vertexOffset + Eigen::Vector3i(leftTriF.row(i));
+    F.row(offset++) = vertexOffset + Eigen::Vector3i(leftTriF.row(i));
   }
 
   vertexOffset += Eigen::Vector3i(leftTriV.rows(), leftTriV.rows(), leftTriV.rows());
-  offset += leftTriF.rows();
 
   for (int i = 0; i < rightTriF.rows(); ++i) {
-    F.row(offset + i) = vertexOffset + Eigen::Vector3i(rightTriF.row(i));
+    F.row(offset++) = vertexOffset + Eigen::Vector3i(rightTriF.row(i));
   }
 
   vertexOffset += Eigen::Vector3i(rightTriV.rows(), rightTriV.rows(), rightTriV.rows());
-  offset += rightTriF.rows();
 
   for (int i = 0; i < frontTriF.rows(); ++i) {
-    F.row(offset + i) = vertexOffset + Eigen::Vector3i(frontTriF.row(i));
+    F.row(offset++) = vertexOffset + Eigen::Vector3i(frontTriF.row(i));
   }
 
   vertexOffset += Eigen::Vector3i(frontTriV.rows(), frontTriV.rows(), frontTriV.rows());
-  offset += frontTriF.rows();
 
   for (int i = 0; i < backTriF.rows(); ++i) {
-    F.row(offset + i) = vertexOffset + Eigen::Vector3i(backTriF.row(i));
+    F.row(offset++) = vertexOffset + Eigen::Vector3i(backTriF.row(i));
   }
 
   cout << "bar " << endl;
   
-  // igl::copyleft::cgal::RemeshSelfIntersectionsParam params;
-  // Eigen::MatrixXd VV;
-  // Eigen::MatrixXi FF;
-  // Eigen::MatrixXi IF;
-  // Eigen::VectorXi J, IM;
-  //
-  // igl::copyleft::cgal::remesh_self_intersections(V,F,params,VV,FF,IF,J,IM);
-  //
-  // igl::writeOFF("foo.off", VV, FF);
+  igl::writeOFF("foo.off", V, F);
 
   igl::viewer::Viewer viewer;
   viewer.data.set_mesh(V, F);
-  viewer.data.set_colors(colors);
-  viewer.data.set_face_based(false);
+  viewer.data.set_face_based(true);
   viewer.launch();
 
   // Tetrahedralized interior
-  // Eigen::MatrixXd TV;
-  // Eigen::MatrixXi TT;
-  // Eigen::MatrixXi TF;
-  //
-  // igl::copyleft::tetgen::tetrahedralize(VV,FF,"pqd1.414Y", TV,TT,TF);
+  Eigen::MatrixXd TV;
+  Eigen::MatrixXi TT;
+  Eigen::MatrixXi TF;
+
+  igl::copyleft::tetgen::tetrahedralize(V,F,"pq1.414Y", TV,TT,TF);
 
   cout << "Tetrahedralize done" << endl;
+
+  loadTetMesh(TV, TT, TF);
 }
