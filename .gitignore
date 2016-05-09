@@ -1,3 +1,9 @@
 build/
 FPNCT_series/
 *~
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+example_bin
+libigl/

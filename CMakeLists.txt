@@ -20,6 +20,7 @@ else()
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ltet -DTETLIBRARY")
 
 ### libIGL options: choose between header only and compiled static library
 # Header-only is preferred for small projects. For larger projects the static build
@@ -27,7 +28,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
 option(LIBIGL_USE_STATIC_LIBRARY "Use LibIGL as static library" OFF)
 
 ### add a customizable menu bar
-option(LIBIGL_WITH_NANOGUI     "Use Nanogui menu"   OFF)
+option(LIBIGL_WITH_NANOGUI     "Use Nanogui menu"   ON)
 
 ### libIGL options: choose your dependencies (by default everything is OFF except opengl) ###
 option(LIBIGL_WITH_VIEWER      "Use OpenGL viewer"  ON)
