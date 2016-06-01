@@ -1,15 +1,28 @@
 #include <vector>
 #include <algorithm>
 
+#include "inpoly.hpp"
 #include "SliceStack.h"
 #include "SliceParser.h"
 #include "Slice.h"
 #include "Tile.h"
 #include "ViewTetMesh.h"
 
-#include <igl/viewer/Viewer.h>
-#include <igl/triangle/triangulate.h>
+#include <igl/colon.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
+#include <igl/cotmatrix.h>
+#include <igl/jet.h>
+#include <igl/min_quad_with_fixed.h>
+//#include <igl/point_in_poly.h>
+#include <igl/setdiff.h>
+#include <igl/slice.h>
+#include <igl/unique.h>
+#include <igl/triangle/triangulate.h>
+#include <igl/viewer/Viewer.h>
+#include <igl/writeOFF.h>
+
+#define INSIDE_COL	300
+#define OUTSIDE_COL	0
 
 using namespace std;
 
@@ -33,11 +46,14 @@ SliceStack::~SliceStack()
 
 void SliceStack::triangulateSlice(int bottomidx, double areaBound, 
                                   Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
-                                  Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces)
+                                  Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
+																	Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig)
 {
   assert(bottomidx >= 0 && bottomidx < slices_.size());
   Tile t(*slices_[bottomidx], *slices_[bottomidx+1]);
-  t.triangulateSlices(areaBound, botverts, botfaces, topverts, topfaces);
+  t.triangulateSlices(areaBound, botverts, botfaces, topverts, topfaces, bot_orig, top_orig);
+	// Then flip normals of bottom slice
+	flipNormal(botfaces);
 }
 
 int SliceStack::getSizeAt(int i) { 
@@ -138,8 +154,19 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   }
 }
 
-void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::MatrixXi &botF, 
-                                      const Eigen::MatrixXd &topV, const Eigen::MatrixXi &topF)
+void SliceStack::flipNormal(Eigen::MatrixXi &f) {
+	for (int i = 0; i < f.rows(); ++i) {
+		int temp = f(i,0);
+		f(i,0) = f(i,2);
+		f(i,2) = temp;
+	}
+}
+
+void SliceStack::tetrahedralizeSlice (
+		const Eigen::MatrixXd &botV, const Eigen::MatrixXi &botF, 
+		const Eigen::MatrixXd &topV, const Eigen::MatrixXi &topF,
+		const Eigen::VectorXi &botorig, const Eigen::VectorXi &toporig,
+		Eigen::MatrixXd &TV, Eigen::MatrixXi &TT, Eigen::MatrixXi &TF, Eigen::VectorXi &TO)
 {
   vector<Eigen::Vector3d> leftV;
   vector<Eigen::Vector3d> rightV;
@@ -198,6 +225,10 @@ void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::
   triangulateSide(2, frontV, frontTriV, frontTriF);
   triangulateSide(1, rightV, rightTriV, rightTriF);
   triangulateSide(3, backV, backTriV, backTriF);
+	flipNormal(leftTriF);
+	flipNormal(backTriF);
+
+	// Can't count points duplicate times
 
   int totalVertices = topV.rows() + botV.rows() + 
     leftTriV.rows() + rightTriV.rows() + backTriV.rows() + frontTriV.rows();
@@ -205,37 +236,67 @@ void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::
   int totalFaces = topF.rows() + botF.rows() + 
     leftTriF.rows() + rightTriF.rows() + backTriF.rows() + frontTriF.rows();
 
-  Eigen::MatrixXd V(totalVertices, 3);
-  Eigen::MatrixXi F(totalFaces, 3);
+  Eigen::MatrixXd V_rep(totalVertices, 3);
+	Eigen::VectorXi M_rep(totalVertices);
 
   int offset = 0;
 
   // Add the vertices
   for (int i = 0; i < botV.rows(); ++i) {
-    V.row(offset++) = botV.row(i);
+		M_rep(offset) = botorig(i);
+    V_rep.row(offset++) = botV.row(i);
   }
 
   for (int i = 0; i < topV.rows(); ++i) {
-    V.row(offset++) = topV.row(i);
+		M_rep(offset) = toporig(i);
+    V_rep.row(offset++) = topV.row(i);
   }
 
   for (int i = 0; i < leftTriV.rows(); ++i) {
-    V.row(offset++) = leftTriV.row(i);
+		// Not original
+		M_rep(offset) = 0;
+    V_rep.row(offset++) = leftTriV.row(i);
   }
 
   for (int i = 0; i < rightTriV.rows(); ++i) {
-    V.row(offset++) = rightTriV.row(i);
+		// Not original
+		M_rep(offset) = 0;
+    V_rep.row(offset++) = rightTriV.row(i);
   }
 
   for (int i = 0; i < frontTriV.rows(); ++i) {
-    V.row(offset++) = frontTriV.row(i);
+		// Not original
+		M_rep(offset) = 0;
+    V_rep.row(offset++) = frontTriV.row(i);
   }
 
   for (int i = 0; i < backTriV.rows(); ++i) {
-    V.row(offset++) = backTriV.row(i);
+		// Not original
+		M_rep(offset) = 0;
+    V_rep.row(offset++) = backTriV.row(i);
   }
 
-  // Add the faces
+	// Get all the unique vertices
+	Eigen::MatrixXd V;
+	// contains mapping from unique to all indices
+	// Size: #V
+	Eigen::VectorXi unique_to_all;
+	// contains mapping from all indices to unique
+	// Size: #V_rep
+	Eigen::VectorXi all_to_unique;
+	igl::unique_rows(V_rep, V,unique_to_all,all_to_unique);
+	//printf("Size of unique is now: %ld vs %ld\n", V_rep.rows(), V.rows());
+	//printf("Sizes are %ld,%ld\n", unique_to_all.rows(), all_to_unique.rows());
+
+	// Get unique markers for M
+	Eigen::VectorXi M(V.rows());
+	for (int i = 0; i < M.rows(); ++i) {
+		//printf("Changing index %d to %d\n", i, unique_to_all(i));
+		M(i) = M_rep(unique_to_all(i));
+	}
+  
+	// Add the faces
+  Eigen::MatrixXi F(totalFaces, 3);
   Eigen::Vector3i vertexOffset(0, 0, 0);
   offset = 0;
 
@@ -273,23 +334,122 @@ void SliceStack::tetrahedralizeSlice (const Eigen::MatrixXd &botV, const Eigen::
     F.row(offset++) = vertexOffset + Eigen::Vector3i(backTriF.row(i));
   }
 
+	// Make sure the faces point to the correct (unique) points
+	for (int i = 0; i < F.rows(); ++i) {
+		for (int j = 0; j < F.row(i).cols(); ++j) {
+			F(i,j) = all_to_unique(F(i,j));
+		}
+	}
+	
+
   cout << "bar " << endl;
   
   igl::writeOFF("foo.off", V, F);
 
-  igl::viewer::Viewer viewer;
-  viewer.data.set_mesh(V, F);
-  viewer.data.set_face_based(true);
-  viewer.launch();
-
+	Eigen::VectorXi FM(F.rows());
+	for (int i = 0; i < F.rows(); ++i) {
+		if (M(F(i,0)) == 2 && M(F(i,1)) == 2 && M(F(i,2)) == 2) {
+			FM(i) = 2;
+		} else {
+			FM(i) = 1;
+		}
+	}
   // Tetrahedralized interior
-  Eigen::MatrixXd TV;
-  Eigen::MatrixXi TT;
-  Eigen::MatrixXi TF;
 
-  igl::copyleft::tetgen::tetrahedralize(V,F,"pq1.414Y", TV,TT,TF);
-
+	// TV will have the tetrahedralized vertices;
+	// TT will have the "" tet indices (#V x 4)
+	// TF will have the "" face indices (#V x 3)
+	// TO will have the "" vertex markers
+  igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, "pq1.414Y", TV,TT,TF,TO);
+  igl::writeOFF("foo_tet.off", TV, TF);
   cout << "Tetrahedralize done" << endl;
+}
 
-  loadTetMesh(TV, TT, TF);
+void SliceStack::computeLaplace(int slice_no,
+																const Eigen::MatrixXd &TV,
+																const Eigen::MatrixXi &TT,
+																const Eigen::MatrixXi &TF,
+																const Eigen::VectorXi &TO) {
+	Eigen::IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
+	Eigen::IOFormat LongFmt(10, 0, ", ", "\n", "[", "]");
+	Eigen::IOFormat RFmt(4, 0, ", ", ", ", "", "", "(", ")");
+	assert(TO.rows() == TV.rows());
+
+	Eigen::VectorXi known;
+	Eigen::VectorXd known_c;
+	std::vector<int> known_v;
+	std::vector<double> known_c_v;
+	for (int i = 0; i < TO.rows(); ++i) {
+		/*
+		if (TV(i,2) == -0.5) {
+			known_v.push_back(i);
+			known_c_v.push_back(1);
+		} else if (TV(i,2) == 0.5) {
+			known_v.push_back(i);
+			known_c_v.push_back(0);
+		}
+		*/
+		if (TO(i) == 2) {
+			known_v.push_back(i);
+			known_c_v.push_back(INSIDE_COL);
+		} else if (TV(i,2) == 0.5 || TV(i,2) == -0.5) {
+			known_v.push_back(i);
+			known_c_v.push_back(OUTSIDE_COL);
+		}
+	}
+	printf("Number of known values is %lu/%lu\n", known_v.size(), TV.rows());
+	known.resize(known_v.size());
+	known_c.resize(known_v.size());
+	for (int i = 0; i < known_c.size(); ++i) {
+		known(i) = known_v[i];
+		known_c(i) = known_c_v[i];
+	}
+	
+	// Construct Laplacian
+	// Dense matrix first
+	//
+	Eigen::MatrixXd L_d(TV.rows(), TV.rows());
+	L_d.setZero();
+	// Set non-diag elements to 1 if connected, 0 otherwise
+	// Use the tets instead of the faces
+	for (int i = 0; i < TT.rows(); ++i) {
+		L_d(TT(i,0), TT(i,1)) = L_d(TT(i,1), TT(i,0)) = -1;
+		L_d(TT(i,1), TT(i,2)) = L_d(TT(i,2), TT(i,1)) = -1;
+		L_d(TT(i,2), TT(i,3)) = L_d(TT(i,3), TT(i,2)) = -1;
+		L_d(TT(i,3), TT(i,0)) = L_d(TT(i,0), TT(i,3)) = -1;
+	}
+
+	// Set diag elements to valence of entry
+	for (int i = 0; i < TV.rows(); ++i) {
+		L_d(i,i) = -L_d.row(i).sum();
+	}
+	Eigen::SparseMatrix<double> L = L_d.sparseView();//, L_known, L_others;
+	
+	Eigen::VectorXd Z;
+	// Solve energy constraints.
+	igl::min_quad_with_fixed_data<double> mqwf;
+	// Linear term is 0
+	Eigen::VectorXd B = Eigen::VectorXd::Zero(TV.rows(), 1);
+	// Empty Constraints
+	Eigen::VectorXd Beq;
+	Eigen::SparseMatrix<double> Aeq;
+	bool success = 
+			igl::min_quad_with_fixed_precompute(L,known,Aeq,false,mqwf);
+	if(!success)
+		fprintf(stderr,"ERROR: fixed_precompute didn't work!\n");
+	igl::min_quad_with_fixed_solve(mqwf,B,known_c,Beq, Z);
+
+	// Pseudo-color based on solution
+	Eigen::MatrixXd C;
+	igl::jet(Z, true, C);
+
+	loadTetMesh(TV, TT, TF, C);
+
+  // Plot the mesh with pseudocolors
+  igl::viewer::Viewer viewer;
+  viewer.data.set_mesh(TV, TF);
+	viewer.data.set_face_based(true);
+  viewer.core.show_lines = false;
+  viewer.data.set_colors(C);
+  viewer.launch();
 }

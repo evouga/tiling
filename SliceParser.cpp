@@ -95,7 +95,7 @@ void readSlicesFromFolder(const char *baseFilename, const char *objectname, vect
 		ss << ".";
 		ss << curslice;
 		Slice *slice = NULL;
-		if(slice = readSlice(ss.str().c_str(), objectname))
+		if( (slice = readSlice(ss.str().c_str(), objectname)) )
 			slices.push_back(slice);
 		else
 			return;

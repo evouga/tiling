@@ -1,10 +1,15 @@
-#include "Tile.h"
-#include "Slice.h"
 #include <limits>
-#include <igl/triangle/triangulate.h>
 #include <sstream>
 #include <iostream>
 
+#include <igl/jet.h>
+#include <igl/triangle/triangulate.h>
+#include <igl/viewer/Viewer.h>
+
+#include "Tile.h"
+#include "Slice.h"
+
+#define ORIGINAL_MARKER	2
 using namespace Eigen;
 using namespace std;
 
@@ -59,20 +64,104 @@ void Tile::computeCubeTransformation()
 	scale_(1,1) = 1.0/widths[1];
 }	
 
-void Tile::triangulateSlice(const Slice &s, double z, double areaBound, Eigen::MatrixXd &verts, Eigen::MatrixXi &faces)
-{
+/*
+// Will resize V and E to fit
+void Tile::getOrig(Eigen::MatrixXd &Vtop, Eigen::MatrixXd &Vbot) {
+	unsigned int total_pts = bottom_.getNumPts() + top_.getNumPts();
+	Vtop.resize(top_.getNumPts(), 3);
+	Vbot.resize(bottom_.getNumPts(), 3);
+	Eigen::MatrixXi E;
+	E.resize(bottom_.getNumPts(), 3);
+	int offset = addOrig(bottom_, Vbot, E, 0);
+	assert(offset == bottom_.getNumPts());
+	fprintf(stderr, "offset is %d and size is %d v is %d\n",
+					offset, bottom_.getNumPts(), Vbot.rows());
+	// Add the z-index
+	for (int i = 0; i < offset; ++i) {
+		Vbot(i, 2) = -0.5;
+	}
+
+	E.resize(top_.getNumPts(), 3);
+	offset = addOrig(top_, Vtop, E, 0);
+	for (int i = 0; i < offset; ++i) {
+		Vtop(i, 2) = 0.5;
+	}
+}
+*/
+
+void Tile::scale(Vector2d &pt) {
+	pt = scale_*(pt+translate_);
+}
+
+void Tile::unscale(Vector2d &pt) {
+	pt = scale_.inverse()*pt - translate_;
+}
+
+// Adds original points to V and E. Should be already the correct size
+int Tile::addOrig(const Slice &s, 
+									Eigen::MatrixXd &V, Eigen::MatrixXi &E,
+									Eigen::VectorXi &VM, Eigen::VectorXi &EM,
+									int offset) {
 	int numcontours = s.contours.size();
-	cout << "num contours: " << numcontours << endl;
-	int totpts = 0;
 	for(int i=0; i<numcontours; i++)
 	{
 		int numpts = s.contours[i].x.size();
-		totpts += numpts;
+		for(int j=0; j<numpts; j++)
+		{
+			Vector2d pt(s.contours[i].x[j], s.contours[i].y[j]);
+			//V.row(offset+j) = scale_*(pt+translate_);
+			scale(pt);
+			V(offset+j, 0) = pt(0);
+			V(offset+j, 1) = pt(1);
+			int prev = (j == 0 ? numpts-1 : j-1);
+			E(offset+j, 0) = offset + j;
+			E(offset+j, 1) = offset + prev;
+			VM(offset+j) = ORIGINAL_MARKER;
+			EM(offset+j) = ORIGINAL_MARKER;
+		}
+		offset += numpts;
 	}
+	return offset;
+}
+
+void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
+	bool dirty = true;
+	while(dirty) {
+		dirty = false;
+		for (int i = 0; i < faces.rows(); ++i) {
+			if (orig(faces(i,0)) == 1 || orig(faces(i,1)) == 1 || orig(faces(i,2)) == 1) {
+				for (int j = 0; j < 3; ++j) {
+					int vert = faces(i,j);
+					if (orig(vert) == 0) {
+						orig(vert) = 1;
+						dirty = true;
+					}
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < orig.rows(); ++i) {
+		if (orig(i) == 0) {
+			orig(i) = ORIGINAL_MARKER;
+		}
+	}
+}
+
+void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
+														Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
+														Eigen::VectorXi &orig)
+{
+	int numcontours = s.contours.size();
+	cout << "num contours: " << numcontours << endl;
+	int totpts = s.getNumPts();
+	
 
 	MatrixXd V(totpts+4, 2);
 	MatrixXi E(totpts+4, 2);
 	MatrixXd H(0, 2);
+	VectorXi VM(totpts+4);
+	VectorXi EM(totpts+4);
 
 	V(0,0) = -0.5;
 	V(0,1) = -0.5;
@@ -90,30 +179,46 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound, Eigen::M
 	E(2,1) = 3;
 	E(3,0) = 3;
 	E(3,1) = 0;
+	VM(0) = 0;
+	VM(1) = 0;
+	VM(2) = 0;
+	VM(3) = 0;
+	EM(0) = 0;
+	EM(1) = 0;
+	EM(2) = 0;
+	EM(3) = 0;
 
-	int offset = 4;
+	addOrig(s, V,E,VM,EM, 4);
 
-	for(int i=0; i<numcontours; i++)
-	{
-		int numpts = s.contours[i].x.size();
-		for(int j=0; j<numpts; j++)
-		{
-			Vector2d pt(s.contours[i].x[j], s.contours[i].y[j]);
-			V.row(offset+j) = scale_*(pt+translate_);
-			int prev = (j == 0 ? numpts-1 : j-1);
-			E(offset+j, 0) = offset + j;
-			E(offset+j, 1) = offset + prev;
+	cout << "Rendering triangle here...\n";
+	/*
+	igl::viewer::Viewer viewer;
+	vector<string> labels;
+	//Eigen::MatrixXd C;
+	//igl::jet(VM, true, C);
+	viewer.data.set_mesh(V, E);
+  //viewer.data.set_face_based(false);
+	//viewer.data.set_colors(C);
+	for (int i = 0; i < VM.rows(); ++i) {
+
+		if (VM(i) == 0) {
+			viewer.data.add_label(V.row(i), "o");
+		} else {
+			viewer.data.add_label(V.row(i), "x");
 		}
-		offset += numpts;
 	}
+  viewer.launch();
+	*/
+
 	stringstream ss;
 	ss << "Da" << areaBound << "q";
-
+  
 	MatrixXd V2;
 	cout << "Delaunay triangulating mesh with " << V.rows() << " verts" << endl;
-	igl::triangle::triangulate(V,E,H,ss.str().c_str(),V2,faces);	
+	igl::triangle::triangulate(V,E,H,VM,EM,ss.str().c_str(),V2,faces,orig);
 	cout << "done" << endl;
 	verts.resize(V2.rows(), 3);
+	flood_fill(faces, orig);
 	for(int i=0; i<verts.rows(); i++)
 	{
 		verts(i, 0) = V2(i,0);
@@ -124,8 +229,9 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound, Eigen::M
 
 void Tile::triangulateSlices(double areaBound, 
 		Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
-		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces)
+		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
+		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig)
 {
-	triangulateSlice(bottom_, -0.5, areaBound, botverts, botfaces);
-	triangulateSlice(top_, 0.5, areaBound, topverts, topfaces);
+	triangulateSlice(bottom_, -0.5, areaBound, botverts, botfaces, bot_orig);
+	triangulateSlice(top_, 0.5, areaBound, topverts, topfaces, top_orig);
 }
