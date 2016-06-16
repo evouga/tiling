@@ -1,12 +1,11 @@
 #include <vector>
 #include <algorithm>
 
-#include "inpoly.hpp"
 #include "SliceStack.h"
 #include "SliceParser.h"
 #include "Slice.h"
 #include "Tile.h"
-#include "ViewTetMesh.h"
+#include "viewTetMesh.h"
 
 #include <igl/colon.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
@@ -443,7 +442,7 @@ void SliceStack::computeLaplace(int slice_no,
 	Eigen::MatrixXd C;
 	igl::jet(Z, true, C);
 
-	loadTetMesh(TV, TT, TF, C);
+  TetMeshViewer::viewTetMesh(TV, TT, TF, Z, true);
 
   // Plot the mesh with pseudocolors
   igl::viewer::Viewer viewer;

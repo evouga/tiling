@@ -2,7 +2,7 @@
 #include <igl/jet.h>
 
 #include "SliceStack.h"
-#include "ViewTetMesh.h"
+#include "viewTetMesh.h"
 
 using namespace std;
 
@@ -35,6 +35,7 @@ int main(int argc, char *argv[])
   ss.triangulateSlice(good_start, 0.05, botverts, botfaces, topverts, topfaces,
 											botorig, toporig);
 
+  /*
   igl::viewer::Viewer viewer;
 	Eigen::MatrixXd C;
 	igl::jet(toporig, true, C);
@@ -58,6 +59,7 @@ int main(int argc, char *argv[])
   viewer.data.set_face_based(true);
 	viewer.data.set_colors(C);
   viewer.launch();
+  */
 
   Eigen::MatrixXd TV;
   Eigen::MatrixXi TT, TF;
@@ -66,7 +68,7 @@ int main(int argc, char *argv[])
 												 botorig, toporig,
 												 TV, TT, TF, TO);
 
-  loadTetMesh(TV, TT, TF);
+  TetMeshViewer::viewTetMesh(TV, TT, TF);
   cout << "Triangulated tile contains " << botverts.rows() << " verts on bottom face and " << topverts.rows() << " verts on top face" << endl;  
 
 	//ss.computeLaplace(TV, TT, TF, TO);
