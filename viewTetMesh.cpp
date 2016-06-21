@@ -3,9 +3,10 @@
 #include <igl/barycenter.h>
 #include <igl/bfs_orient.h>
 #include <igl/copyleft/marching_cubes.h>
-#include <igl/embree/reorient_facets_raycast.h>
 #include <igl/jet.h>
 #include <igl/viewer/Viewer.h>
+
+#include "offsetSurface.h"
 
 // These need to be global, so they can be used in Viewer functions
 namespace {
@@ -17,29 +18,19 @@ namespace {
   Eigen::MatrixXi _TT; // tet tets (similar to triangles)
   Eigen::MatrixXi _TF; // tet faces
   Eigen::VectorXd _TC; // tet vertex values (will be cerated to colors)
-} // namespace
+  // For the offset surfaces
+  Eigen::MatrixXd _OFF_V;
+  Eigen::MatrixXi _OFF_F;
 
+  void setValueViewer(double val, igl::viewer::Viewer& viewer) {
 
-namespace {
-// This function is called every time a keyboard button is pressed
-bool key_down_depth(igl::viewer::Viewer& viewer, unsigned char key, int modifier)
-{
-  using namespace std;
-  using namespace Eigen;
+    using namespace Eigen;
 
-  if (key >= '1' && key <= '9')
-  {
-    double t = double((key - '1')+1) / 9.0;
-		double t_abs = _TV.col(2).minCoeff() + 
-				(_TV.col(2).maxCoeff() - _TV.col(2).minCoeff()) * t;
+    std::vector<int> s;
 
-    VectorXd v = _B.col(2).array() - _B.col(2).minCoeff();
-    v /= v.col(0).maxCoeff();
-
-    vector<int> s;
-
-    for (unsigned i=0; i<v.size(); ++i) {
-      if (v(i) <= t) {
+    for (unsigned i=0; i<_TT.rows(); ++i) {
+      if (_C(_TT(i, 0)) <= val && _C(_TT(i, 1)) <= val &&
+          _C(_TT(i, 2)) <= val && _C(_TT(i, 3)) <= val) {
         s.push_back(i);
 			}
 		}
@@ -47,7 +38,52 @@ bool key_down_depth(igl::viewer::Viewer& viewer, unsigned char key, int modifier
     MatrixXd V_temp(s.size()*4,3);
     MatrixXi F_temp(s.size()*4,3);
 		MatrixXd C_temp(s.size()*4,3);
-    VectorXd S_temp(s.size()*4);
+
+    for (unsigned i=0; i<s.size();++i)
+    {
+      V_temp.row(i*4+0) = _TV.row(_TT(s[i],0));
+      V_temp.row(i*4+1) = _TV.row(_TT(s[i],1));
+      V_temp.row(i*4+2) = _TV.row(_TT(s[i],2));
+      V_temp.row(i*4+3) = _TV.row(_TT(s[i],3));
+      C_temp.row(i*4+0) = _C.row(_TT(s[i],0));
+      C_temp.row(i*4+1) = _C.row(_TT(s[i],1));
+      C_temp.row(i*4+2) = _C.row(_TT(s[i],2));
+      C_temp.row(i*4+3) = _C.row(_TT(s[i],3));
+      F_temp.row(i*4+0) << (i*4)+0, (i*4)+1, (i*4)+3;
+      F_temp.row(i*4+1) << (i*4)+0, (i*4)+2, (i*4)+1;
+      F_temp.row(i*4+2) << (i*4)+3, (i*4)+2, (i*4)+0;
+      F_temp.row(i*4+3) << (i*4)+1, (i*4)+2, (i*4)+3;
+    }
+    
+    igl::writeOFF("viewer.off", V_temp, F_temp);
+    // Set the viewer data.
+    viewer.data.clear();
+    viewer.data.set_mesh(V_temp,F_temp);
+    viewer.data.set_face_based(true);
+    viewer.data.set_colors(C_temp);
+    viewer.core.lighting_factor = 0;
+  }
+
+  // This will set the vertices and faces in the viewer,
+  // based on the depth. Uses barycenters (stored in _B) to determine
+  // what is displayed.
+  void setDepthViewer(double depth, igl::viewer::Viewer& viewer) {
+    using namespace Eigen;
+
+    Eigen::VectorXd v = _B.col(2).array() - _B.col(2).minCoeff();
+    v /= v.col(0).maxCoeff();
+
+    std::vector<int> s;
+
+    for (unsigned i=0; i<v.size(); ++i) {
+      if (v(i) <= depth) {
+        s.push_back(i);
+			}
+		}
+
+    MatrixXd V_temp(s.size()*4,3);
+    MatrixXi F_temp(s.size()*4,3);
+		MatrixXd C_temp(s.size()*4,3);
 
     for (unsigned i=0; i<s.size();++i)
     {
@@ -60,16 +96,11 @@ bool key_down_depth(igl::viewer::Viewer& viewer, unsigned char key, int modifier
 				C_temp.row(i*4+1) = _C.row(_TT(s[i],1));
 				C_temp.row(i*4+2) = _C.row(_TT(s[i],2));
 				C_temp.row(i*4+3) = _C.row(_TT(s[i],3));
-        S_temp(i*4+0) = _TC(_TT(s[i],0));
-        S_temp(i*4+1) = _TC(_TT(s[i],1));
-        S_temp(i*4+2) = _TC(_TT(s[i],2));
-        S_temp(i*4+3) = _TC(_TT(s[i],3));
 			} else {
 				C_temp(i*4+0) = 0;
 				C_temp(i*4+1) = 0;
 				C_temp(i*4+2) = 0;
 				C_temp(i*4+3) = 0;
-        // Don't need S_temp
 			}
       F_temp.row(i*4+0) << (i*4)+0, (i*4)+1, (i*4)+3;
       F_temp.row(i*4+1) << (i*4)+0, (i*4)+2, (i*4)+1;
@@ -88,6 +119,18 @@ bool key_down_depth(igl::viewer::Viewer& viewer, unsigned char key, int modifier
 		}
   }
 
+// This function is called every time a keyboard button is pressed
+bool key_down_depth(igl::viewer::Viewer& viewer, unsigned char key, int modifier)
+{
+  using namespace std;
+  using namespace Eigen;
+
+  if (key >= '1' && key <= '9')
+  {
+    double t = double((key - '1')+1) / 9.0;
+    setDepthViewer(t, viewer);
+  }
+
 
   return false;
 }
@@ -98,6 +141,7 @@ void TetMeshViewer::viewTetMesh(const Eigen::MatrixXd &TV, const Eigen::MatrixXi
   _TV = TV;
   _TT = TT;
   _TF = TF;
+  _TC.resize(0);  // Must do or it will suppose there are colors
   igl::barycenter(_TV,_TT,_B);
   
   igl::viewer::Viewer viewer;
@@ -122,7 +166,59 @@ void TetMeshViewer::viewTetMesh(const Eigen::MatrixXd &TV, const Eigen::MatrixXi
   viewer.launch();
 }
 
-void TetMeshViewer::extractOffset(float offset, Eigen::MatrixXd &V, Eigen::MatrixXi &F) {
+void TetMeshViewer::viewOffsetSurface(
+    const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
+    const Eigen::VectorXd &Z) {
+  _TV = TV;
+  _TT = TT;
+  _TF = TF;
+  _TC = Z;
+  igl::barycenter(_TV,_TT,_B);
+  igl::jet(Z, true, _C);
+  
+  double offset = 0.8;
+  OffsetSurface::Triangulation T;
+  OffsetSurface::generateOffsetSurface(TV, TT, Z, offset, _OFF_V, _OFF_F, T);
+  igl::viewer::Viewer viewer;
+  //viewer.callback_init = [&T, &offset](igl::viewer::Viewer& viewer) {
+  printf("Setting up viewer...\n");
+  viewer.callback_init = [&](igl::viewer::Viewer& viewer) {
+    viewer.ngui->addWindow(Eigen::Vector2i(220,10),"Offset Options");
+    viewer.ngui->addVariable("double", offset);
+    viewer.ngui->addButton("Redraw",[&offset, &viewer, &T, &TV](){
+        //setDepthViewer(offset, viewer); 
+        printf("Attempting to draw offset surface at %lf\n", offset);
+        OffsetSurface::generateOffsetSurface(T, offset, _OFF_V, _OFF_F);
+        viewer.data.clear();
+        viewer.data.set_mesh(_OFF_V, _OFF_F);
+        });
+    viewer.screen->performLayout();
+    return false;
+  };
+  printf("Setting up callback keys "
+         "(press 'T' to toggle normal mesh, press 'O' to toggle offset mesh)\n");
+  viewer.callback_key_down = [&](igl::viewer::Viewer& viewer, unsigned char key, int modifier) {
+      if (key == 'T') {
+        setValueViewer(offset, viewer);
+      }
+      if (key == 'O') {
+        viewer.data.clear();
+        viewer.data.set_mesh(_OFF_V, _OFF_F);
+      }
+      return false;
+    };
+  printf("Success! Now generating mesh\n");
+  //OffsetSurface::generateOffsetSurface(TV, Z, 0.5, Voff, Foff);
+  //viewer.data.clear();
+  //viewer.data.set_mesh(Voff, Foff);
+  //viewer.callback_key_down = &key_down_depth;
+  //key_down_depth(viewer,'5',0);
+  viewer.data.set_mesh(_OFF_V, _OFF_F);
+  viewer.launch();
+}
+
+void extractOffset(float offset, Eigen::MatrixXd &V, Eigen::MatrixXi &F) {
 
   //igl::marching_cubes(*_C, *_TV, 
 }
+

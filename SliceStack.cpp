@@ -1,6 +1,7 @@
 #include <vector>
 #include <algorithm>
 
+#include "offsetSurface.h"
 #include "SliceStack.h"
 #include "SliceParser.h"
 #include "Slice.h"
@@ -20,8 +21,8 @@
 #include <igl/viewer/Viewer.h>
 #include <igl/writeOFF.h>
 
-#define INSIDE_COL	300
-#define OUTSIDE_COL	0
+#define INSIDE_COL	0
+#define OUTSIDE_COL	1
 
 using namespace std;
 
@@ -104,7 +105,6 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   int offset = 0;
 
   for (int i = 0; i < botV.size(); ++i) {
-    cout << offset << " " << inputV.row(offset) << endl;
     if (constantCoord < 2)
       inputV.row(offset++) = Eigen::Vector2d(botV[i][1], botV[i][2]);
     else 
@@ -112,12 +112,10 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   }
 
   for (int i = 1; i < 5; ++i) {
-    cout << offset << " " << inputV.row(offset) << endl;
     inputV.row(offset++) = Eigen::Vector2d(0.5, -0.5 + 1.0 / 5.0 * i);
   }
 
   for (int i = 0; i < topV.size(); ++i) {
-    cout << offset << " " << inputV.row(offset) << endl;
     if (constantCoord >= 2)
       inputV.row(offset++) = Eigen::Vector2d(topV[i][0], topV[i][2]);
     else
@@ -125,7 +123,6 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   }
 
   for (int i = 1; i < 5; ++i) {
-    cout << offset << " " << inputV.row(offset) << endl;
     inputV.row(offset++) = Eigen::Vector2d(-0.5, -0.5 + 1.0 / 5.0 * i);
   }
 
@@ -361,7 +358,10 @@ void SliceStack::tetrahedralizeSlice (
 	// TO will have the "" vertex markers
   igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, "pq1.414Y", TV,TT,TF,TO);
   igl::writeOFF("foo_tet.off", TV, TF);
-  cout << "Tetrahedralize done" << endl;
+  printf("Tetrahedralize done\n");
+  printf("Number of faces before:%lu and after:%lu\n",
+         F.rows(), TF.rows());
+  
 }
 
 void SliceStack::computeLaplace(int slice_no,
@@ -441,6 +441,7 @@ void SliceStack::computeLaplace(int slice_no,
 	// Pseudo-color based on solution
 	Eigen::MatrixXd C;
 	igl::jet(Z, true, C);
+  printf("Min Z is %lf and max Z is %lf\n", Z.minCoeff(), Z.maxCoeff());
 
   TetMeshViewer::viewTetMesh(TV, TT, TF, Z, true);
 
@@ -451,4 +452,7 @@ void SliceStack::computeLaplace(int slice_no,
   viewer.core.show_lines = false;
   viewer.data.set_colors(C);
   viewer.launch();
+
+  igl::writeOFF("triangulation.off", TV, TF);
+  TetMeshViewer::viewOffsetSurface(TV, TF, TT, Z);
 }
