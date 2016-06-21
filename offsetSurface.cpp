@@ -12,7 +12,7 @@
 
 #define HIGHEST_TEMP  100.
 
-#define OFFSET_DEBUG 1
+//#define OFFSET_DEBUG 1
 //#define OFF_MINUS
 
 namespace OffsetSurface {
