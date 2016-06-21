@@ -20,6 +20,8 @@ namespace GLOBAL {
 
   // Original marker, used by tetgen and triangulate.
   const int original_marker = 2;
+  // nonoriginal_marker is used by tetgen for defining non-contour faces
+  const int nonoriginal_marker = 1;
 }
 
 #endif
