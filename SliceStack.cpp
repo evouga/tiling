@@ -1,13 +1,6 @@
 #include <vector>
 #include <algorithm>
 
-#include "offsetSurface.h"
-#include "SliceStack.h"
-#include "SliceParser.h"
-#include "Slice.h"
-#include "Tile.h"
-#include "viewTetMesh.h"
-
 #include <igl/colon.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/cotmatrix.h>
@@ -21,8 +14,13 @@
 #include <igl/viewer/Viewer.h>
 #include <igl/writeOFF.h>
 
-#define INSIDE_COL	0
-#define OUTSIDE_COL	1
+#include "glob_defs.h"
+#include "offsetSurface.h"
+#include "SliceStack.h"
+#include "SliceParser.h"
+#include "Slice.h"
+#include "Tile.h"
+#include "viewTetMesh.h"
 
 using namespace std;
 
@@ -112,7 +110,7 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   }
 
   for (int i = 1; i < 5; ++i) {
-    inputV.row(offset++) = Eigen::Vector2d(0.5, -0.5 + 1.0 / 5.0 * i);
+    inputV.row(offset++) = Eigen::Vector2d(GLOBAL::z_lim, -GLOBAL::z_lim + 1.0 / 5.0 * i);
   }
 
   for (int i = 0; i < topV.size(); ++i) {
@@ -123,7 +121,8 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   }
 
   for (int i = 1; i < 5; ++i) {
-    inputV.row(offset++) = Eigen::Vector2d(-0.5, -0.5 + 1.0 / 5.0 * i);
+    inputV.row(offset++) = Eigen::Vector2d(
+        -GLOBAL::z_lim, -GLOBAL::z_lim + 1.0 / 5.0 * i);
   }
 
   for (int i = 0; i < inputV.rows(); ++i) {
@@ -133,20 +132,23 @@ void SliceStack::triangulateSide (int constantCoord, vector<Eigen::Vector3d> &ve
   Eigen::MatrixXd tmpV;
 
 	cout << "Delaunay triangulating mesh with " << inputV.rows() << " verts" << endl;
-	igl::triangle::triangulate(inputV,inputE,H,"DYa0.05q",tmpV,F);	
+  stringstream params;
+  params << "DYa" << triangle_max_area;
+  params << "q";
+	igl::triangle::triangulate(inputV,inputE,H,params.str().c_str(),tmpV,F);	
 	cout << "done" << endl;
 
   V.resize(tmpV.rows(), 3);
 
   for (int i = 0; i < tmpV.rows(); ++i) {
     if (constantCoord == 0)
-      V.row(i) = Eigen::Vector3d(-0.5, tmpV(i, 0), tmpV(i, 1));
+      V.row(i) = Eigen::Vector3d(-GLOBAL::z_lim, tmpV(i, 0), tmpV(i, 1));
     else if (constantCoord == 1)
-      V.row(i) = Eigen::Vector3d(0.5, tmpV(i, 0), tmpV(i, 1));
+      V.row(i) = Eigen::Vector3d(GLOBAL::z_lim, tmpV(i, 0), tmpV(i, 1));
     else if (constantCoord == 2)
-      V.row(i) = Eigen::Vector3d(tmpV(i, 0), -0.5, tmpV(i, 1));
+      V.row(i) = Eigen::Vector3d(tmpV(i, 0), -GLOBAL::z_lim, tmpV(i, 1));
     else if (constantCoord == 3)
-      V.row(i) = Eigen::Vector3d(tmpV(i, 0), 0.5, tmpV(i, 1));
+      V.row(i) = Eigen::Vector3d(tmpV(i, 0), GLOBAL::z_lim, tmpV(i, 1));
   }
 }
 
@@ -169,7 +171,7 @@ void SliceStack::tetrahedralizeSlice (
   vector<Eigen::Vector3d> frontV;
   vector<Eigen::Vector3d> backV;
 
-  double bound = 0.5;
+  double bound = GLOBAL::z_lim;
 
   for (int i = 0; i < botV.rows(); ++i) {
     // x coordinate touches
@@ -344,10 +346,12 @@ void SliceStack::tetrahedralizeSlice (
 
 	Eigen::VectorXi FM(F.rows());
 	for (int i = 0; i < F.rows(); ++i) {
-		if (M(F(i,0)) == 2 && M(F(i,1)) == 2 && M(F(i,2)) == 2) {
-			FM(i) = 2;
+		if (M(F(i,0)) == GLOBAL::original_marker && 
+        M(F(i,1)) == GLOBAL::original_marker && 
+        M(F(i,2)) == GLOBAL::original_marker) {
+			FM(i) = GLOBAL::original_marker;
 		} else {
-			FM(i) = 1;
+			FM(i) = GLOBAL::nonoriginal_marker;
 		}
 	}
   // Tetrahedralized interior
@@ -356,7 +360,10 @@ void SliceStack::tetrahedralizeSlice (
 	// TT will have the "" tet indices (#V x 4)
 	// TF will have the "" face indices (#V x 3)
 	// TO will have the "" vertex markers
-  igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, "pq1.414Y", TV,TT,TF,TO);
+  stringstream params;
+  params << "pq" << tetgen_max_rad_ratio;
+  params << "Y";
+  igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, params.str().c_str(), TV,TT,TF,TO);
   igl::writeOFF("foo_tet.off", TV, TF);
   printf("Tetrahedralize done\n");
   printf("Number of faces before:%lu and after:%lu\n",
@@ -380,20 +387,20 @@ void SliceStack::computeLaplace(int slice_no,
 	std::vector<double> known_c_v;
 	for (int i = 0; i < TO.rows(); ++i) {
 		/*
-		if (TV(i,2) == -0.5) {
+		if (TV(i,2) == -GLOBAL::z_lim) {
 			known_v.push_back(i);
 			known_c_v.push_back(1);
-		} else if (TV(i,2) == 0.5) {
+		} else if (TV(i,2) == GLOBAL::z_lim) {
 			known_v.push_back(i);
 			known_c_v.push_back(0);
 		}
 		*/
-		if (TO(i) == 2) {
+		if (TO(i) == GLOBAL::original_marker) {
 			known_v.push_back(i);
-			known_c_v.push_back(INSIDE_COL);
-		} else if (TV(i,2) == 0.5 || TV(i,2) == -0.5) {
+			known_c_v.push_back(GLOBAL::inside_temp);
+		} else if (TV(i,2) == GLOBAL::z_lim || TV(i,2) == -GLOBAL::z_lim) {
 			known_v.push_back(i);
-			known_c_v.push_back(OUTSIDE_COL);
+			known_c_v.push_back(GLOBAL::outside_temp);
 		}
 	}
 	printf("Number of known values is %lu/%lu\n", known_v.size(), TV.rows());
@@ -446,12 +453,14 @@ void SliceStack::computeLaplace(int slice_no,
   TetMeshViewer::viewTetMesh(TV, TT, TF, Z, true);
 
   // Plot the mesh with pseudocolors
+  /*
   igl::viewer::Viewer viewer;
   viewer.data.set_mesh(TV, TF);
 	viewer.data.set_face_based(true);
   viewer.core.show_lines = false;
   viewer.data.set_colors(C);
   viewer.launch();
+  */
 
   igl::writeOFF("triangulation.off", TV, TF);
   TetMeshViewer::viewOffsetSurface(TV, TF, TT, Z);

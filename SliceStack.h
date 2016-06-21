@@ -46,6 +46,13 @@ private:
 	int numSlices_;
 	std::vector<Slice *> slices_;
 	std::vector<double> heights_;
+
+  // Variable used by triangle to determine the maximum area of each triangle.
+  // See -a flag.
+  const float triangle_max_area = 0.02;
+  // Variable used by tetgen to determine the maximum allowed *ratio* between
+  // the radius and the area. See -q flag.
+  const float tetgen_max_rad_ratio = 1.1;
 };
 
 #endif

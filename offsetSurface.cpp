@@ -10,10 +10,9 @@
 #include <igl/copyleft/cgal/complex_to_mesh.h>
 #include <igl/in_element.h>
 
-#define HIGHEST_TEMP  100.
+#include "glob_defs.h"
 
-//#define OFFSET_DEBUG 1
-//#define OFF_MINUS
+#define OFFSET_DEBUG 0
 
 namespace OffsetSurface {
 
@@ -39,14 +38,6 @@ void generateOffsetSurface(Triangulation &T, double off,
   const Eigen::VectorXd &C = T._C;
   const Eigen::MatrixXi &TT = T._T; // tets
 
-  // Code borrowed from igl: https://github.com/libigl/libigl/blob/master/include/igl/copyleft/cgal/signed_distance_isosurface.cpp
-  const auto &Vmax = V.colwise().maxCoeff();
-  const auto &Vmin = V.colwise().minCoeff();
-  const double bbd = (Vmax-Vmin).norm();
-  const double r = bbd/2.;
-  const auto &Vmid = 0.5*(Vmax + Vmin);
-
-  Point_3 cmid(Vmid(0), Vmid(1), Vmid(2));
   // Need the triangulation and the offset
   Function fun = 
       [&](const Point_3 &qq) -> FT
@@ -55,15 +46,15 @@ void generateOffsetSurface(Triangulation &T, double off,
         q << qq.x(), qq.y(), qq.z();
         // Only return first element containing q
         std::vector<int> tets = tree.find(V, TT, q, true);
+        // Make sure it's in a tet
         if (tets.size() < 1) {
-          return HIGHEST_TEMP;
+          return GLOBAL::highest_temp;
         }
         int tet = tets[0];
-        // Make sure it's in a tet
 
         // Get the 4 vertices
         Eigen::MatrixXd mat(4, 4);
-        Eigen::Vector4d query(4);
+        bool z_boundary_bad = false;
         for (int i = 0; i < 4; ++i) {
           mat(0, i) = V(TT(tet,i), 0);
           mat(1, i) = V(TT(tet,i), 1);
@@ -73,7 +64,22 @@ void generateOffsetSurface(Triangulation &T, double off,
             printf("%f %f %f %f 1\n",
                    V(TT(tet,i), 0), V(TT(tet,i), 1), V(TT(tet,i), 2),
                    C(TT(tet,i)));
+          // If one of the vertices is on the z boundary, and this is also on
+          // the z boundary, then it's not a real point.
+          if ( (V(TT(tet, i), 2) == GLOBAL::z_lim ||
+                V(TT(tet, i), 2) == -GLOBAL::z_lim) &&
+               C(TT(tet, i)) == GLOBAL::outside_temp) {
+            z_boundary_bad = true;
+          }
         }
+        // If the z-coordinate is on the boundary and one of the tet
+        // vertices is 'outside', return a bad value as well.
+        if (z_boundary_bad && (q(2) == GLOBAL::z_lim ||
+                               q(2) == -GLOBAL::z_lim)) {
+          return GLOBAL::highest_temp;
+        }
+
+        Eigen::Vector4d query(4);
         query(0) = q(0);
         query(1) = q(1);
         query(2) = q(2);
@@ -89,7 +95,10 @@ void generateOffsetSurface(Triangulation &T, double off,
              << mat << "\n"
              << mat.inverse() << "\n"
              << query << "\n"
-             << alpha << "\n";
+             << alpha << "\n"
+             << val << "\n"
+             << C(TT(tet, 0)) << ", " << C(TT(tet, 1)) << ", " 
+             << C(TT(tet, 2)) << ", " << C(TT(tet, 3)) << "\n";
              */
         double col_val = 0;
         for (int i = 0; i < 4; ++i) {
@@ -101,11 +110,7 @@ void generateOffsetSurface(Triangulation &T, double off,
                                  q(0), q(1), q(2), val);
         if (OFFSET_DEBUG) printf("%f %f %f %f 2\n",
                                  q(0), q(1), q(2), col_val);
-#ifdef OFF_MINUS
-        return off - val;
-#else
         return val - off;
-#endif
       };
 
   /*
@@ -120,15 +125,27 @@ void generateOffsetSurface(Triangulation &T, double off,
   fprintf(stderr, "Finished with grid!\n");
   return;
   */
+  // Code borrowed from igl: https://github.com/libigl/libigl/blob/master/include/igl/copyleft/cgal/signed_distance_isosurface.cpp
+  const auto &Vmax = V.colwise().maxCoeff();
+  const auto &Vmin = V.colwise().minCoeff();
+  const double bbd = (Vmax-Vmin).norm();
+  const double r = bbd/2.;
+  const auto &Vmid = 0.5*(Vmax + Vmin);
+
+  //Point_3 cmid(Vmid(0), Vmid(1), Vmid(2));
+  Point_3 cmid(0, 0, 0);
   // Now, find the surface
   //Sphere_3 bounding_sphere(cmid, r*r);  // squared radius
   Sphere_3 bounding_sphere(cmid, (r+off)*(r+off));  // squared radius
   Surface_3 surface(fun, bounding_sphere);
   // Use default values for angle bound, radius bound, distance bound (respectively)
-  CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 0.2, 0.01);
+  CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 0.2, 0.05);
   //CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 1.1, 1.1);
   // Mesh surface
   CTr tr;  // 3D-Delaunay triangulation
+  for (int i = 0; i < V.rows(); ++i) {
+    tr.insert(Point_3(V(i,0), V(i,1), V(i,2)));
+  }
   C2t3 c2t3(tr); // 2D-complex in 3D-Delaunay triangulation
   CGAL::make_surface_mesh(c2t3, surface, criteria, CGAL::Manifold_tag());
   // Complex to (V,F)

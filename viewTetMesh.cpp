@@ -29,8 +29,8 @@ namespace {
     std::vector<int> s;
 
     for (unsigned i=0; i<_TT.rows(); ++i) {
-      if (_C(_TT(i, 0)) <= val && _C(_TT(i, 1)) <= val &&
-          _C(_TT(i, 2)) <= val && _C(_TT(i, 3)) <= val) {
+      if (_TC(_TT(i, 0)) <= val && _TC(_TT(i, 1)) <= val &&
+          _TC(_TT(i, 2)) <= val && _TC(_TT(i, 3)) <= val) {
         s.push_back(i);
 			}
 		}
@@ -55,7 +55,6 @@ namespace {
       F_temp.row(i*4+3) << (i*4)+1, (i*4)+2, (i*4)+3;
     }
     
-    igl::writeOFF("viewer.off", V_temp, F_temp);
     // Set the viewer data.
     viewer.data.clear();
     viewer.data.set_mesh(V_temp,F_temp);

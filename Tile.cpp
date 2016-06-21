@@ -6,10 +6,10 @@
 #include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
 
+#include "glob_defs.h"
 #include "Tile.h"
 #include "Slice.h"
 
-#define ORIGINAL_MARKER	2
 using namespace Eigen;
 using namespace std;
 
@@ -57,7 +57,7 @@ void Tile::computeCubeTransformation()
 			maxs[1] = max(maxs[1], top_.contours[i].y[j]);
 		}
 	}
-	translate_ = -0.5*(mins+maxs);
+	translate_ = -GLOBAL::z_lim*(mins+maxs);
 	Vector2d widths =  (1.0 + tilePadding_)*(maxs-mins);
 	scale_.setZero();
 	scale_(0,0) = 1.0/widths[0];
@@ -78,13 +78,13 @@ void Tile::getOrig(Eigen::MatrixXd &Vtop, Eigen::MatrixXd &Vbot) {
 					offset, bottom_.getNumPts(), Vbot.rows());
 	// Add the z-index
 	for (int i = 0; i < offset; ++i) {
-		Vbot(i, 2) = -0.5;
+		Vbot(i, 2) = -GLOBAL::z_lim;
 	}
 
 	E.resize(top_.getNumPts(), 3);
 	offset = addOrig(top_, Vtop, E, 0);
 	for (int i = 0; i < offset; ++i) {
-		Vtop(i, 2) = 0.5;
+		Vtop(i, 2) = GLOBAL::z_lim;
 	}
 }
 */
@@ -116,8 +116,8 @@ int Tile::addOrig(const Slice &s,
 			int prev = (j == 0 ? numpts-1 : j-1);
 			E(offset+j, 0) = offset + j;
 			E(offset+j, 1) = offset + prev;
-			VM(offset+j) = ORIGINAL_MARKER;
-			EM(offset+j) = ORIGINAL_MARKER;
+			VM(offset+j) = GLOBAL::original_marker;
+			EM(offset+j) = GLOBAL::original_marker;
 		}
 		offset += numpts;
 	}
@@ -143,7 +143,7 @@ void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
 
 	for (int i = 0; i < orig.rows(); ++i) {
 		if (orig(i) == 0) {
-			orig(i) = ORIGINAL_MARKER;
+			orig(i) = GLOBAL::original_marker;
 		}
 	}
 }
@@ -163,14 +163,14 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
 	VectorXi VM(totpts+4);
 	VectorXi EM(totpts+4);
 
-	V(0,0) = -0.5;
-	V(0,1) = -0.5;
-	V(1,0) = 0.5;
-	V(1,1) = -0.5;
-	V(2,0) = 0.5;
-	V(2,1) = 0.5;
-	V(3,0) = -0.5;
-	V(3,1) = 0.5;
+	V(0,0) = -GLOBAL::z_lim;
+	V(0,1) = -GLOBAL::z_lim;
+	V(1,0) = GLOBAL::z_lim;
+	V(1,1) = -GLOBAL::z_lim;
+	V(2,0) = GLOBAL::z_lim;
+	V(2,1) = GLOBAL::z_lim;
+	V(3,0) = -GLOBAL::z_lim;
+	V(3,1) = GLOBAL::z_lim;
 	E(0,0) = 0;
 	E(0,1) = 1;
 	E(1,0) = 1;
@@ -232,6 +232,6 @@ void Tile::triangulateSlices(double areaBound,
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
 		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig)
 {
-	triangulateSlice(bottom_, -0.5, areaBound, botverts, botfaces, bot_orig);
-	triangulateSlice(top_, 0.5, areaBound, topverts, topfaces, top_orig);
+	triangulateSlice(bottom_, -GLOBAL::z_lim, areaBound, botverts, botfaces, bot_orig);
+	triangulateSlice(top_, GLOBAL::z_lim, areaBound, topverts, topfaces, top_orig);
 }
