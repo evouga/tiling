@@ -7,7 +7,9 @@
 #include <CGAL/make_surface_mesh.h>
 #include <CGAL/Surface_mesh_default_triangulation_3.h>
 
+#include <igl/boundary_facets.h>
 #include <igl/copyleft/cgal/complex_to_mesh.h>
+#include <igl/exterior_edges.h>
 #include <igl/in_element.h>
 
 #include "glob_defs.h"
@@ -37,6 +39,8 @@ void generateOffsetSurface(Triangulation &T, double off,
   const Eigen::MatrixXd &V = T._V;
   const Eigen::VectorXd &C = T._C;
   const Eigen::MatrixXi &TT = T._T; // tets
+  auto maxs = V.colwise().maxCoeff();
+  auto mins = V.colwise().minCoeff();
 
   // Need the triangulation and the offset
   Function fun = 
@@ -66,16 +70,16 @@ void generateOffsetSurface(Triangulation &T, double off,
                    C(TT(tet,i)));
           // If one of the vertices is on the z boundary, and this is also on
           // the z boundary, then it's not a real point.
-          if ( (V(TT(tet, i), 2) == GLOBAL::z_lim ||
-                V(TT(tet, i), 2) == -GLOBAL::z_lim) &&
+          if ( (V(TT(tet, i), 2) == maxs(2) ||
+                V(TT(tet, i), 2) == mins(2)) &&
                C(TT(tet, i)) == GLOBAL::outside_temp) {
             z_boundary_bad = true;
           }
         }
         // If the z-coordinate is on the boundary and one of the tet
         // vertices is 'outside', return a bad value as well.
-        if (z_boundary_bad && (q(2) == GLOBAL::z_lim ||
-                               q(2) == -GLOBAL::z_lim)) {
+        if (z_boundary_bad && (q(2) == maxs(2) ||
+                               q(2) == mins(2))) {
           return GLOBAL::highest_temp;
         }
 
@@ -132,24 +136,31 @@ void generateOffsetSurface(Triangulation &T, double off,
   const double r = bbd/2.;
   const auto &Vmid = 0.5*(Vmax + Vmin);
 
-  //Point_3 cmid(Vmid(0), Vmid(1), Vmid(2));
-  Point_3 cmid(0, 0, 0);
+  Point_3 cmid(Vmid(0), Vmid(1), Vmid(2));
+  //Point_3 cmid(0, 0, 0);
   // Now, find the surface
   //Sphere_3 bounding_sphere(cmid, r*r);  // squared radius
   Sphere_3 bounding_sphere(cmid, (r+off)*(r+off));  // squared radius
   Surface_3 surface(fun, bounding_sphere);
   // Use default values for angle bound, radius bound, distance bound (respectively)
-  CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 0.2, 0.05);
+  //CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 0.2, 0.5);
   //CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 1.1, 1.1);
+  CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 2.1, 2.1);
   // Mesh surface
+  printf("Inserting points to triangulation...");
   CTr tr;  // 3D-Delaunay triangulation
   for (int i = 0; i < V.rows(); ++i) {
     tr.insert(Point_3(V(i,0), V(i,1), V(i,2)));
   }
+  printf("done!\nCreating surface mesh...");
+  fflush(stdout);
   C2t3 c2t3(tr); // 2D-complex in 3D-Delaunay triangulation
   CGAL::make_surface_mesh(c2t3, surface, criteria, CGAL::Manifold_tag());
+  printf("done!\nNow converting complex to mesh...");
+  fflush(stdout);
   // Complex to (V,F)
   igl::copyleft::cgal::complex_to_mesh(c2t3, Voff, Foff);
+  printf("done!\n");
 }
 
 /**
@@ -166,6 +177,57 @@ void generateOffsetSurface(const Eigen::MatrixXd &V,
   T._C = C;
 
   generateOffsetSurface(T, off, Voff, Foff);
+}
+
+void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
+                                 const Eigen::MatrixXi &TT,
+                                 const Eigen::VectorXd &C, double off,
+                                 Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff) {
+  std::vector<int> s;
+  for (int i = 0; i < TT.rows(); ++i) {
+    if (C(TT(i, 0)) <= off && C(TT(i, 1)) <= off &&
+        C(TT(i, 2)) <= off && C(TT(i, 3)) <= off) {
+      s.push_back(i);
+    }
+  }
+
+  Voff.resize(s.size() * 4, 3);
+  Foff.resize(s.size() * 4, 3);
+  for (unsigned i = 0; i < s.size(); ++i)
+  {
+    Voff.row(i*4+0) = V.row(TT(s[i],0));
+    Voff.row(i*4+1) = V.row(TT(s[i],1));
+    Voff.row(i*4+2) = V.row(TT(s[i],2));
+    Voff.row(i*4+3) = V.row(TT(s[i],3));
+    Foff.row(i*4+0) << (i*4)+0, (i*4)+1, (i*4)+3;
+    Foff.row(i*4+1) << (i*4)+0, (i*4)+2, (i*4)+1;
+    Foff.row(i*4+2) << (i*4)+3, (i*4)+2, (i*4)+0;
+    Foff.row(i*4+3) << (i*4)+1, (i*4)+2, (i*4)+3;
+  }
+
+  // Make sure the vertices are all unique
+	// Get all the unique vertices
+	Eigen::MatrixXd Vu;
+	// contains mapping from unique to all indices
+	// Size: #V
+	Eigen::VectorXi unique_to_all;
+	// contains mapping from all indices to unique
+	// Size: #V_rep
+	Eigen::VectorXi all_to_unique;
+	igl::unique_rows(Voff, Vu,unique_to_all,all_to_unique);
+  // Remember these.
+  Voff = Vu;
+
+  // Also need to update faces.
+  for (int i = 0; i < Foff.rows(); ++i) {
+    for (int j = 0; j < 3; ++j) {
+      Foff(i, j) = all_to_unique(Foff(i, j));
+    }
+  }
+  // And remove duplicate faces.
+  Eigen::MatrixXi Fu;
+  igl::unique_rows(Foff, Fu,unique_to_all,all_to_unique);
+  Foff = Fu;
 }
 
 }

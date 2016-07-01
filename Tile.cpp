@@ -1,6 +1,7 @@
+#include <iostream>
 #include <limits>
 #include <sstream>
-#include <iostream>
+#include <stdlib.h>
 
 #include <igl/jet.h>
 #include <igl/triangle/triangulate.h>
@@ -15,7 +16,7 @@ using namespace std;
 
 const double Tile::tilePadding_ = 0.10;
 
-Tile::Tile(const Slice &bottom, const Slice &top) : bottom_(bottom), top_(top)
+Tile::Tile(const Slice &bottom, const Slice &top, bool scale) : bottom_(bottom), top_(top), use_scaling_(scale)
 {
 	computeCubeTransformation();
 }
@@ -57,11 +58,18 @@ void Tile::computeCubeTransformation()
 			maxs[1] = max(maxs[1], top_.contours[i].y[j]);
 		}
 	}
-	translate_ = -GLOBAL::z_lim*(mins+maxs);
-	Vector2d widths =  (1.0 + tilePadding_)*(maxs-mins);
-	scale_.setZero();
-	scale_(0,0) = 1.0/widths[0];
-	scale_(1,1) = 1.0/widths[1];
+  if (use_scaling_) {
+    translate_ = -GLOBAL::z_lim*(mins+maxs);
+    Vector2d widths =  (1.0 + tilePadding_)*(maxs-mins);
+    scale_.setZero();
+    scale_(0,0) = 1.0/widths[0];
+    scale_(1,1) = 1.0/widths[1];
+  } else {
+    translate_.setZero();
+    scale_.setZero();
+    scale_(0,0) = 1;
+    scale_(1,1) = 1;
+  }
 }	
 
 /*
@@ -148,7 +156,10 @@ void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
 	}
 }
 
-void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
+void Tile::triangulateSlice(const Slice &s, 
+                            double xmin, double xmax,
+                            double ymin, double ymax,
+                            double z, double areaBound,
 														Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
 														Eigen::VectorXi &orig)
 {
@@ -163,14 +174,14 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
 	VectorXi VM(totpts+4);
 	VectorXi EM(totpts+4);
 
-	V(0,0) = -GLOBAL::z_lim;
-	V(0,1) = -GLOBAL::z_lim;
-	V(1,0) = GLOBAL::z_lim;
-	V(1,1) = -GLOBAL::z_lim;
-	V(2,0) = GLOBAL::z_lim;
-	V(2,1) = GLOBAL::z_lim;
-	V(3,0) = -GLOBAL::z_lim;
-	V(3,1) = GLOBAL::z_lim;
+  V(0,0) = xmin;
+  V(0,1) = ymin;
+  V(1,0) = xmax;
+  V(1,1) = ymin;
+  V(2,0) = xmax;
+  V(2,1) = ymax;
+  V(3,0) = xmin;
+  V(3,1) = ymax;
 	E(0,0) = 0;
 	E(0,1) = 1;
 	E(1,0) = 1;
@@ -232,6 +243,28 @@ void Tile::triangulateSlices(double areaBound,
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
 		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig)
 {
-	triangulateSlice(bottom_, -GLOBAL::z_lim, areaBound, botverts, botfaces, bot_orig);
-	triangulateSlice(top_, GLOBAL::z_lim, areaBound, topverts, topfaces, top_orig);
+  double xmin,xmax, ymin,ymax;
+  if (use_scaling_) {
+    xmin = ymin = -0.5;
+    xmax = ymax = 0.5;
+  } else {
+    bottom_.xminmax(xmin,xmax);
+    bottom_.yminmax(ymin,ymax);
+    double txmin,txmax, tymin,tymax;
+    top_.xminmax(txmin,txmax);
+    top_.yminmax(tymin,tymax);
+    xmin = min(xmin, txmin);
+    xmax = max(xmax, txmax);
+    ymin = min(ymin, tymin);
+    ymax = max(ymax, tymax);
+  }
+
+  //double thickness = bottom_.thickness;
+  double thickness = (std::max(ymax, xmax) - std::min(ymin, xmin)) / 2.0;
+  printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
+         __FILE__, __LINE__, thickness, bottom_.thickness);
+	triangulateSlice(bottom_, xmin,xmax, ymin,ymax, -thickness/2.0,
+                   areaBound, botverts, botfaces, bot_orig);
+	triangulateSlice(top_, xmin,xmax, ymin,ymax, thickness/2.0,
+                   areaBound, topverts, topfaces, top_orig);
 }

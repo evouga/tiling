@@ -177,6 +177,7 @@ void TetMeshViewer::viewOffsetSurface(
   
   double offset = 0.8;
   OffsetSurface::Triangulation T;
+  printf("Generating offset surface...\n");
   OffsetSurface::generateOffsetSurface(TV, TT, Z, offset, _OFF_V, _OFF_F, T);
   igl::viewer::Viewer viewer;
   //viewer.callback_init = [&T, &offset](igl::viewer::Viewer& viewer) {

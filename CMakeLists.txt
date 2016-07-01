@@ -20,7 +20,7 @@ else()
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ltet -DTETLIBRARY")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ltet -DTETLIBRARY")
 
 ### libIGL options: choose between header only and compiled static library
 # Header-only is preferred for small projects. For larger projects the static build
@@ -71,5 +71,6 @@ add_definitions(${LIBIGL_DEFINITIONS})
 
 ### Add your project files
 FILE(GLOB SRCFILES *.cpp)
+message("Project sources are: ${SRCFILES}")
 add_executable(${PROJECT_NAME}_bin ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(${PROJECT_NAME}_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})

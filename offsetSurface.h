@@ -25,6 +25,13 @@ void generateOffsetSurface(
     double off, Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff,
     Triangulation &T
     );
+
+void generateOffsetSurface_naive(
+    const Eigen::MatrixXd &V,
+    const Eigen::MatrixXi &TT,
+    const Eigen::VectorXd &C, double off,
+    Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff);
+
 } // namespace OffsetSurface
 
 #endif // OFFSET_SURFACE_H

@@ -8,7 +8,7 @@ class Slice;
 class Tile
 {
 public:
-	Tile(const Slice &bottom, const Slice &top);
+	Tile(const Slice &bottom, const Slice &top, bool scale = true);
 	~Tile();
 	void getOrig(Eigen::MatrixXd &Vtop, Eigen::MatrixXd &Vbot);
 	void triangulateSlices(double areaBound, 
@@ -26,7 +26,10 @@ private:
 							Eigen::VectorXi &VM, Eigen::VectorXi &EM,
 							int offset = 0);
 
-	void triangulateSlice(const Slice &s, double z, double areaBound,
+	void triangulateSlice(const Slice &s, 
+                        double xmin, double xmax,
+                        double ymin, double ymax,
+                        double z, double areaBound,
 												Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
 												Eigen::VectorXi &orig);
 
@@ -40,6 +43,8 @@ private:
 	const Slice &top_;	
 	Eigen::Vector2d translate_;
 	Eigen::Matrix2d scale_;
+  
+  bool use_scaling_;
 };
 
 #endif
