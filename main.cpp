@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
       orig(i) = GLOBAL::nonoriginal_marker;
     }
   }
-  printf("Number orig: %d/%d\n", n_orig, V.rows());
+  printf("Number orig: %d/%ld\n", n_orig, V.rows());
 
   // Display them
   igl::viewer::Viewer viewer;

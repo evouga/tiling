@@ -14,6 +14,8 @@
 using namespace Eigen;
 using namespace std;
 
+#define ZSCALE_HACK
+
 const double Tile::tilePadding_ = 0.10;
 
 Tile::Tile(const Slice &bottom, const Slice &top, bool scale) : bottom_(bottom), top_(top), use_scaling_(scale)
@@ -259,10 +261,12 @@ void Tile::triangulateSlices(double areaBound,
     ymax = max(ymax, tymax);
   }
 
-  //double thickness = bottom_.thickness;
-  double thickness = (std::max(ymax, xmax) - std::min(ymin, xmin)) / 2.0;
+  double thickness = bottom_.thickness;
+#ifdef ZSCALE_HACK
+  thickness = (std::max(ymax, xmax) - std::min(ymin, xmin)) / 2.0;
   printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
          __FILE__, __LINE__, thickness, bottom_.thickness);
+#endif
 	triangulateSlice(bottom_, xmin,xmax, ymin,ymax, -thickness/2.0,
                    areaBound, botverts, botfaces, bot_orig);
 	triangulateSlice(top_, xmin,xmax, ymin,ymax, thickness/2.0,

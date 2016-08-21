@@ -22,12 +22,24 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   Vc = V;
   double difference;
 
+  // Set the original rows to zero in the Laplace matrix
+  L.prune([&orig](int r, int c, float) { 
+          return (orig(r) != GLOBAL::original_marker);// || (r == c); 
+         });
+
+  igl::viewer::Viewer v;
   do {
     // Compute the mass matrix
     igl::massmatrix(Vc, F, igl::MASSMATRIX_TYPE_BARYCENTRIC, M);
+    //igl::massmatrix(Vc, F, igl::MASSMATRIX_TYPE_VORONOI, M);
+    //for (int i = 0; i < V.rows(); ++i) {
+    //  M.coeffRef(i,i) = 0;
+    //}
+    printf("Number of nonzeros for M: %d vs rows %d\n", M.nonZeros(), M.rows());
     // Solve (M-delta*L) U = M*U
     const auto &S = (M - timestep*L);
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver(S);
+    //Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver(S);
+    Eigen::SparseLU<Eigen::SparseMatrix<double> > solver(S);
     assert(solver.info() == Eigen::Success);
     U = solver.solve(M*Vc).eval();
 
@@ -48,20 +60,16 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     // Normalize to unit surface area (important for numerics)
     U.array() /= sqrt(area);
     */
+    
     // Calculate difference between U and Vc
     difference = 0;
     for (int i = 0; i < U.rows(); ++i) {
-      if (orig(i) == GLOBAL::original_marker) {
-        // Keep this the same.
-        U.row(i) = V.row(i);
-      } else {
-        difference += (U.row(i) - Vc.row(i)).norm();
-      }
+      difference += (U.row(i) - Vc.row(i)).norm();
     }
     printf("difference this round is %lf (stop is %lf)\n",
            difference, gStoppingCriteria);
     Vc = U;
-    igl::viewer::Viewer v;
+
     v.data.set_mesh(Vc, F);
     v.launch();
 
