@@ -161,6 +161,7 @@ void SliceStack::triangulateSide (int constantCoord,
   stringstream params;
   params << "DYa" << triangle_max_area;
   params << "q";
+  cout << "parameters are " << params.str() << endl;
 	igl::triangle::triangulate(inputV,inputE,H,params.str().c_str(),tmpV,F);	
 	cout << "done" << endl;
 
