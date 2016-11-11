@@ -14,7 +14,7 @@ namespace GLOBAL {
 
   // This is the upper and lower z-axis amounts
   const float z_lim = 0.5;
-  
+
   // Used in offsetSurface to define the 'temperature' outside the volume.
   // Must be anything greater than outside_temp.
   const float highest_temp = 100.f;
@@ -23,6 +23,12 @@ namespace GLOBAL {
   const int original_marker = 2;
   // nonoriginal_marker is used by tetgen for defining non-contour faces
   const int nonoriginal_marker = 1;
+
+  // Used to compare doubles.
+  const double EPS = 1e-2;
+
+  // Number of extra points to add to sides of the unit cube.
+  const int EXTRA = 10;
 }
 
 #endif

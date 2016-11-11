@@ -15,35 +15,24 @@ struct Contour
 
 struct Slice
 {
-	std::vector<Contour> contours;
+  std::vector<Contour> contours;
 	double thickness;
 
+  // Assumes mn and mx have been initialized.
   void xminmax(double &mn, double &mx) const {
-    bool first = true;
     for (unsigned int i = 0; i < contours.size(); ++i) {
       auto el = std::minmax_element(contours[i].x.begin(), contours[i].x.end());
-      if (first) {
-        first = false;
-        mn = *el.first;
-        mx = *el.second;
-      } else {
-        mn = std::min(mn, *el.first);
-        mx = std::max(mx, *el.second);
-      }
+      mn = std::min(mn, *el.first);
+      mx = std::max(mx, *el.second);
     }
   }
+
+  // Assumes mn and mx have been initialized.
   void yminmax(double &mn, double &mx) const {
-    bool first = true;
     for (unsigned int i = 0; i < contours.size(); ++i) {
       auto el = std::minmax_element(contours[i].y.begin(), contours[i].y.end());
-      if (first) {
-        first = false;
-        mn = *el.first;
-        mx = *el.second;
-      } else {
-        mn = std::min(mn, *el.first);
-        mx = std::max(mx, *el.second);
-      }
+      mn = std::min(mn, *el.first);
+      mx = std::max(mx, *el.second);
     }
   }
 

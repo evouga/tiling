@@ -52,7 +52,7 @@ class ContourVisitor : public XMLVisitor
 				vals >> y;
 				vals >> dummy;
 				contour.x.push_back(x);
-				contour.y.push_back(y);				
+				contour.y.push_back(y);
 			}
 			removeDuplicateVerts(contour);
 			contours.push_back(contour);
@@ -100,6 +100,6 @@ void readSlicesFromFolder(const char *baseFilename, const char *objectname, vect
 		else
 			return;
 		curslice++;
-	}	
+	}
 }
 

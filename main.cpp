@@ -280,13 +280,15 @@ void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
 
 // Can pass in topverts, topfaces, and toporig if you want to use them.
 void getOffsetSurface(int bot_slice_no, SliceStack &ss,
-                      Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, Eigen::VectorXi &botorig,
-                      Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces, Eigen::VectorXi &toporig,
+                      Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces,
+                      Eigen::VectorXi &botorig,
+                      Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
+                      Eigen::VectorXi &toporig,
                       Eigen::MatrixXd &offsetV, Eigen::MatrixXi &offsetF,
                       Eigen::VectorXi &orig,
                       bool view=false) {
-
   igl::viewer::Viewer v;
+
   ss.triangulateSlice(bot_slice_no, 0.005,
                       botverts, botfaces, topverts, topfaces,
 											botorig, toporig);
@@ -325,7 +327,9 @@ void getOffsetSurface(int bot_slice_no, SliceStack &ss,
 												 botorig, toporig,
 												 TV, TT, TF, TO);
 
-  cout << "Triangulated tile contains " << botverts.rows() << " verts on bottom face and " << topverts.rows() << " verts on top face" << endl;  
+  cout << "Triangulated tile contains ";
+  cout << botverts.rows() << " verts on bottom face and ";
+  cout << topverts.rows() << " verts on top face" << endl;
 
   Eigen::VectorXd Z;
 	ss.computeLaplace(bot_slice_no, TV, TT, TF, TO, Z);
@@ -378,10 +382,8 @@ void getOffsetSurface(int bot_slice_no, SliceStack &ss,
   }
 }
 
-int main(int argc, char *argv[])
-{
-  if(argc != 3)
-  {
+int main(int argc, char *argv[]) {
+  if(argc != 3) {
     cerr << "Must specify the base filename and object name" << endl;
     return -1;
   }
@@ -393,6 +395,7 @@ int main(int argc, char *argv[])
   for (int i = 0; i < ss.getNumSlices(); ++i) {
     if (ss.getSizeAt(i) > 0) {
       good_start = i;
+      printf("Using slice number %d\n", good_start);
       break;
     }
   }
@@ -400,7 +403,6 @@ int main(int argc, char *argv[])
     printf("ERROR: Couldn't find valid slices!\n");
     return -1;
   }
-  printf("Using slice number %d\n", good_start);
   Eigen::MatrixXd bV, tV;
   Eigen::MatrixXi bF, tF;
   Eigen::VectorXi borig, torig;
@@ -409,7 +411,7 @@ int main(int argc, char *argv[])
   Eigen::MatrixXi topfaces, botfaces;
   Eigen::VectorXi toporig, botorig;
 
-  getOffsetSurface(good_start, ss, 
+  getOffsetSurface(good_start, ss,
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
                    bV, bF, borig, true);
@@ -424,6 +426,7 @@ int main(int argc, char *argv[])
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
                    tV, tF, torig, true);
+  assert(false);
 
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;

@@ -17,26 +17,29 @@ public:
 	int getNumSlices() {return numSlices_;}
 
 	void triangulateSlice(int bottomidx, double areaBound,
-		Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
-		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
-		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig);
+                        Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces,
+                        Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
+                        Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig);
 
   // Triangulate the side, keeping a certain constant coordinate (see .cpp file)
   // Include the min and the max for the non-constant coord (mn,mx) and
   // the min and the max for the constant coord (o_mn, o_mx)
-  void triangulateSide (int constantCoord,
-                        double mn, double mx,
-                        double o_mn, double o_mx,
-                        std::vector<Eigen::Vector3d> &verts,
-                        Eigen::MatrixXd &V, Eigen::MatrixXi &F);
+  void triangulateSide(int constantCoord,
+                       double mn, double mx,
+                       double o_mn, double o_mx,
+                       std::vector<Eigen::Vector3d> &verts,
+                       Eigen::MatrixXd &V, Eigen::MatrixXi &F);
 
-	// Will tetrahedralize slice and return it as TV (vertices) TT (tets) and
-	// TF (faces)
-	void tetrahedralizeSlice(
-			const Eigen::MatrixXd &botverts, const Eigen::MatrixXi &botfaces,
-			const Eigen::MatrixXd &topverts, const Eigen::MatrixXi &topfaces,
-			const Eigen::VectorXi &botorig, const Eigen::VectorXi &toporig,
-			Eigen::MatrixXd &TV, Eigen::MatrixXi &TT, Eigen::MatrixXi &TF, Eigen::VectorXi &TO);
+  // Will tetrahedralize slice and
+  // return it as TV (vertices) TT (tets) and TF (faces)
+  void tetrahedralizeSlice(const Eigen::MatrixXd &botverts,
+                           const Eigen::MatrixXi &botfaces,
+                           const Eigen::MatrixXd &topverts,
+                           const Eigen::MatrixXi &topfaces,
+                           const Eigen::VectorXi &botorig,
+                           const Eigen::VectorXi &toporig,
+                           Eigen::MatrixXd &TV, Eigen::MatrixXi &TT,
+                           Eigen::MatrixXi &TF, Eigen::VectorXi &TO);
 
 	// Solve the laplacian and color by boundary conditions
 	// TO is a vector corresponding to the vertices, where 1 means it's original
@@ -51,7 +54,7 @@ public:
 private:
 	void flipNormal(Eigen::MatrixXi &f);
 	int numSlices_;
-	std::vector<Slice *> slices_;
+	std::vector<Slice*> slices_;
 	std::vector<double> heights_;
   Eigen::MatrixXd bbox_;
 

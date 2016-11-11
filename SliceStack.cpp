@@ -1,4 +1,5 @@
 #include <vector>
+#include <limits>
 #include <algorithm>
 
 #include <igl/colon.h>
@@ -24,32 +25,24 @@
 
 using namespace std;
 
-SliceStack::SliceStack(const char *baseFilename, const char *objectname)
-{
+SliceStack::SliceStack(const char *baseFilename, const char *objectname) {
   readSlicesFromFolder(baseFilename, objectname, slices_);
   numSlices_ = slices_.size();
-  double z = 0;
+
+  double z = 0.0;
+  double xmin = numeric_limits<double>::max();
+  double xmax = numeric_limits<double>::min();
+  double ymin = numeric_limits<double>::max();
+  double ymax = numeric_limits<double>::min();
+
   for(int i=0; i<numSlices_; i++)
   {
     heights_.push_back(z);
     z += slices_[i]->thickness;
+    slices_[i]->xminmax(xmin, xmax);
+    slices_[i]->yminmax(ymin, ymax);
   }
 
-  double xmin,xmax, ymin,ymax;
-  slices_[0]->xminmax(xmin, xmax);
-  slices_[0]->yminmax(ymin, ymax);
-  // Set the bounding box.
-  for (int i = 1; i < slices_.size(); ++i) {
-    
-    double txmin,txmax, tymin,tymax;
-    slices_[i]->xminmax(txmin, txmax);
-    slices_[i]->yminmax(tymin, tymax);
-
-    xmin = min(xmin, txmin);
-    xmax = max(xmax, txmax);
-    ymin = min(ymin, tymin);
-    ymax = max(ymax, tymax);
-  }
   // 3x2
   bbox_.resize(3, 2);
   bbox_.row(0) << xmin, xmax;
@@ -57,40 +50,44 @@ SliceStack::SliceStack(const char *baseFilename, const char *objectname)
   bbox_.row(2) << 0, z;
 }
 
-SliceStack::~SliceStack()
-{
+SliceStack::~SliceStack() {
   for(int i=0; i<numSlices_; i++)
     delete slices_[i];
 }
 
-void SliceStack::triangulateSlice(int bottomidx, double areaBound,
-                                  Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
-                                  Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
-																	Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig)
-{
-  assert(bottomidx >= 0 && bottomidx < slices_.size());
-  Tile t(*slices_[bottomidx], *slices_[bottomidx+1], bbox_);
-  printf("PRE Number of vertices: top %lu bot %lu\n", topverts.rows(), botverts.rows());
-  t.triangulateSlices(areaBound, botverts, botfaces, topverts, topfaces, bot_orig, top_orig);
-  printf("Number of vertices: top %lu bot %lu\n", topverts.rows(), botverts.rows());
-	// Then flip normals of bottom slice
-	flipNormal(botfaces);
+void SliceStack::triangulateSlice(int start, double areaBound,
+                                  Eigen::MatrixXd &botV, Eigen::MatrixXi &botF,
+                                  Eigen::MatrixXd &topV, Eigen::MatrixXi &topF,
+                                  Eigen::VectorXi &botO, Eigen::VectorXi &topO) {
+  assert(start >= 0 && start < slices_.size());
+
+  printf("PRE Number of vertices: ");
+  printf("top %lu bot %lu\n", topV.rows(), botV.rows());
+
+  Tile t(*slices_[start], *slices_[start+1], bbox_);
+  t.triangulateSlices(areaBound, botV, botF, topV, topF, botO, topO);
+
+  printf("Number of vertices: top %lu bot %lu\n", topV.rows(), botV.rows());
+
+  // Then flip normals of bottom slice
+  flipNormal(botF);
 }
 
-int SliceStack::getSizeAt(int i) { 
-  if (i > slices_.size()) return -1;
+int SliceStack::getSizeAt(int i) {
+  if (i > slices_.size())
+    return -1;
   return slices_[i]->contours.size();
 }
 
-bool customSortByX (const Eigen::Vector3d a, const Eigen::Vector3d b) {
+bool customSortByX(const Eigen::Vector3d a, const Eigen::Vector3d b) {
   return a[0] < b[0];
 }
 
-bool customSortByY (const Eigen::Vector3d a, const Eigen::Vector3d b) {
+bool customSortByY(const Eigen::Vector3d a, const Eigen::Vector3d b) {
   return a[1] < b[1];
 }
 
-bool customSortByZ (const Eigen::Vector3d a, const Eigen::Vector3d b) {
+bool customSortByZ(const Eigen::Vector3d a, const Eigen::Vector3d b) {
   return a[2] < b[2];
 }
 
@@ -98,11 +95,11 @@ bool customSortByZ (const Eigen::Vector3d a, const Eigen::Vector3d b) {
 // constantCoord => 0: (-0.5, _, _), 1: (0.5, _, _), 2: (_, -0.5, _), 3: (_, 0.5, _)
 // also include the minimum and maximum values in the non-constant coord (mn, mx)
 // and the minimum and maximum values for this coord (o_mn, o_mx)
-void SliceStack::triangulateSide (int constantCoord, 
-                                  double mn, double mx,
-                                  double o_mn, double o_mx,
-                                  vector<Eigen::Vector3d> &verts, 
-                                  Eigen::MatrixXd &V, Eigen::MatrixXi &F) {
+void SliceStack::triangulateSide(int constantCoord,
+                                 double mn, double mx,
+                                 double o_mn, double o_mx,
+                                 vector<Eigen::Vector3d> &verts,
+                                 Eigen::MatrixXd &V, Eigen::MatrixXi &F) {
 
   sort(verts.begin(), verts.end(), customSortByZ);
 
@@ -123,18 +120,9 @@ void SliceStack::triangulateSide (int constantCoord,
     else
       topV.push_back(verts[i]);
   }
-  
+
   // Set the z-scaling as the distance between the top and the bottom vert
   double z_spacing = verts.back()(2) - verts.front()(2);
-  /*
-  if (botV.size() > 1) {
-    z_spacing = -2 * botV[0][2];
-  } else if (topV.size() > 1) {
-    z_spacing = 2 * topV[0][2];
-  } else {
-    z_spacing = 2 * GLOBAL::z_lim;
-  }
-  */
 
   // If the constant coord is y, sort by x direction.
   if (constantCoord >= 2) {
@@ -147,9 +135,8 @@ void SliceStack::triangulateSide (int constantCoord,
     sort(topV.rbegin(), topV.rend(), customSortByY); // backwards
   }
 
-  int numExtra = 4;
-  Eigen::MatrixXd inputV(verts.size() + numExtra*2, 2);
-  Eigen::MatrixXi inputE(verts.size() + numExtra*2, 2);
+  Eigen::MatrixXd inputV(verts.size() + GLOBAL::EXTRA*2, 2);
+  Eigen::MatrixXi inputE(verts.size() + GLOBAL::EXTRA*2, 2);
   Eigen::MatrixXd H(0, 2);
 
   int offset = 0;
@@ -157,50 +144,50 @@ void SliceStack::triangulateSide (int constantCoord,
   // Add bottom points, from left to right
   for (int i = 0; i < botV.size(); ++i) {
     if (constantCoord < 2) {
-      inputV.row(offset++) = Eigen::Vector2d(botV[i][1], botV[i][2]);
+      inputV.row(offset++) << botV[i][1], botV[i][2];
     } else {
-      inputV.row(offset++) = Eigen::Vector2d(botV[i][0], botV[i][2]);
+      inputV.row(offset++) << botV[i][0], botV[i][2];
     }
   }
 
   // Add right points
   // Get the vector that extends from the top corner to the bottom corner.
   Eigen::Vector3d bot2Top = topV.front() - botV.back(); // top is sorted backwards
-  for (int i = 1; i <= numExtra; ++i) {
-    auto shift_by = botV.back() + bot2Top * i / (numExtra + 1);
+  for (int i = 1; i <= GLOBAL::EXTRA; ++i) {
+    auto shift_by = botV.back() + bot2Top * i / (GLOBAL::EXTRA + 1);
     if (constantCoord >= 2) {  //constant is y
       inputV.row(offset++) << shift_by(0), shift_by(2);
     } else {  // constant is x
       inputV.row(offset++) << shift_by(1), shift_by(2);
     }
     //inputV.row(offset++) = 
-        //Eigen::Vector2d(mx, botV[0][2] + z_spacing / numExtra * i);
+        //Eigen::Vector2d(mx, botV[0][2] + z_spacing / GLOBAL::EXTRA * i);
   }
 
   // Add top points, from right to left
   for (int i = 0; i < topV.size(); ++i) {
     if (constantCoord >= 2) {
-      inputV.row(offset++) = Eigen::Vector2d(topV[i][0], topV[i][2]);
+      inputV.row(offset++) << topV[i][0], topV[i][2];
     } else {
-      inputV.row(offset++) = Eigen::Vector2d(topV[i][1], topV[i][2]);
+      inputV.row(offset++) << topV[i][1], topV[i][2];
     }
   }
 
   // Add left points
   Eigen::Vector3d top2Bot = botV.front() - topV.back();
-  for (int i = 1; i <= numExtra; ++i) {
-    auto shift_by = topV.back() + top2Bot * i / (numExtra + 1);
+  for (int i = 1; i <= GLOBAL::EXTRA; ++i) {
+    auto shift_by = topV.back() + top2Bot * i / (GLOBAL::EXTRA + 1);
     if (constantCoord >= 2) {  //constant is y
       inputV.row(offset++) << shift_by(0), shift_by(2);
     } else {  // constant is x
       inputV.row(offset++) << shift_by(1), shift_by(2);
     }
     //inputV.row(offset++) =
-        //Eigen::Vector2d(mn, topV[0][2] - z_spacing / numExtra * i);
+        //Eigen::Vector2d(mn, topV[0][2] - z_spacing / GLOBAL::EXTRA * i);
   }
 
   for (int i = 0; i < inputV.rows(); ++i) {
-    inputE.row(i) = Eigen::Vector2i(i, (i + 1) % (inputV.rows()));
+    inputE.row(i) << i, (i + 1) % (inputV.rows());
   }
 
   Eigen::MatrixXd tmpV;
@@ -217,13 +204,13 @@ void SliceStack::triangulateSide (int constantCoord,
 
   for (int i = 0; i < tmpV.rows(); ++i) {
     if (constantCoord == 0)
-      V.row(i) = Eigen::Vector3d(o_mn, tmpV(i, 0), tmpV(i, 1));
+      V.row(i) << o_mn, tmpV(i, 0), tmpV(i, 1);
     else if (constantCoord == 1)
-      V.row(i) = Eigen::Vector3d(o_mx, tmpV(i, 0), tmpV(i, 1));
+      V.row(i) << o_mx, tmpV(i, 0), tmpV(i, 1);
     else if (constantCoord == 2)
-      V.row(i) = Eigen::Vector3d(tmpV(i, 0), o_mn, tmpV(i, 1));
+      V.row(i) << tmpV(i, 0), o_mn, tmpV(i, 1);
     else if (constantCoord == 3)
-      V.row(i) = Eigen::Vector3d(tmpV(i, 0), o_mx, tmpV(i, 1));
+      V.row(i) << tmpV(i, 0), o_mx, tmpV(i, 1);
   }
 }
 
@@ -236,64 +223,60 @@ void SliceStack::flipNormal(Eigen::MatrixXi &f) {
 }
 
 void SliceStack::tetrahedralizeSlice (
-		const Eigen::MatrixXd &botV, const Eigen::MatrixXi &botF, 
-		const Eigen::MatrixXd &topV, const Eigen::MatrixXi &topF,
-		const Eigen::VectorXi &botorig, const Eigen::VectorXi &toporig,
-		Eigen::MatrixXd &TV, Eigen::MatrixXi &TT, Eigen::MatrixXi &TF, Eigen::VectorXi &TO)
-{
+        const Eigen::MatrixXd &botV, const Eigen::MatrixXi &botF,
+        const Eigen::MatrixXd &topV, const Eigen::MatrixXi &topF,
+        const Eigen::VectorXi &botorig, const Eigen::VectorXi &toporig,
+        Eigen::MatrixXd &TV, Eigen::MatrixXi &TT,
+        Eigen::MatrixXi &TF, Eigen::VectorXi &TO) {
+  auto botMin = botV.colwise().minCoeff();
+  auto botMax = botV.colwise().maxCoeff();
+  auto topMin = topV.colwise().minCoeff();
+  auto topMax = topV.colwise().maxCoeff();
+
+  double xmin = std::min(botMin(0), topMin(0)),
+         ymin = std::min(botMin(1), topMin(1)),
+         zmin = std::min(botMin(2), topMin(2)),
+         xmax = std::max(botMax(0), topMax(0)),
+         ymax = std::max(botMax(1), topMax(1)),
+         zmax = std::max(botMax(2), topMax(2));
+
+  printf("bounding box is %f,%f %f,%f %f,%f\n", xmin,xmax, ymin,ymax, zmin,zmax);
+
   vector<Eigen::Vector3d> leftV;
   vector<Eigen::Vector3d> rightV;
   vector<Eigen::Vector3d> frontV;
   vector<Eigen::Vector3d> backV;
 
-  double xmin,xmax, ymin,ymax, zmin,zmax;
-  auto botMin = botV.colwise().minCoeff();
-  auto botMax = botV.colwise().maxCoeff();
-  auto topMin = topV.colwise().minCoeff();
-  auto topMax = topV.colwise().maxCoeff();
-  xmin = std::min(botMin(0), topMin(0));
-  ymin = std::min(botMin(1), topMin(1));
-  zmin = std::min(botMin(2), topMin(2));
-  xmax = std::max(botMax(0), topMax(0));
-  ymax = std::max(botMax(1), topMax(1));
-  zmax = std::max(botMax(2), topMax(2));
-  double epsilon = 1e-2;
-  printf("bounding box is %f,%f %f,%f %f,%f\n", xmin,xmax, ymin,ymax, zmin,zmax);
-
   for (int i = 0; i < botV.rows(); ++i) {
+    double x = botV(i, 0),
+           y = botV(i, 1);
     // x coordinate touches
-    if (botV(i, 0) <= botMin(0) + epsilon) {
+    if (x <= botMin(0) + GLOBAL::EPS)
       leftV.push_back(botV.row(i));
-    }
-    if (botV(i, 0) >= botMax(0) - epsilon) {
+    if (x >= botMax(0) - GLOBAL::EPS)
       rightV.push_back(botV.row(i));
-    }
     // y coordinate touches
-    if (botV(i, 1) <= botMin(1) + epsilon) {
-      frontV.push_back(botV.row(i)); 
-    }
-    if (botV(i, 1) >= botMax(1) - epsilon) {
-      backV.push_back(botV.row(i)); 
-    }
+    if (y <= botMin(1) + GLOBAL::EPS)
+      frontV.push_back(botV.row(i));
+    if (y >= botMax(1) - GLOBAL::EPS)
+      backV.push_back(botV.row(i));
   }
 
   for (int i = 0; i < topV.rows(); ++i) {
+    double x = topV(i, 0),
+           y = topV(i, 1);
     // x coordinate touches
-    if (topV(i, 0) <= topMin(0) + epsilon) {
+    if (x <= topMin(0) + GLOBAL::EPS)
       leftV.push_back(topV.row(i));
-    }
-    if (topV(i, 0) >= topMax(0) - epsilon) {
+    if (x >= topMax(0) - GLOBAL::EPS)
       rightV.push_back(topV.row(i));
-    }
     // y coordinate touches
-    if (topV(i, 1) <= topMin(1) + epsilon) {
-      frontV.push_back(topV.row(i)); 
-    }
-    if (topV(i, 1) >= topMax(1) - epsilon) {
-      backV.push_back(topV.row(i)); 
-    }
+    if (y <= topMin(1) + GLOBAL::EPS)
+      frontV.push_back(topV.row(i));
+    if (y >= topMax(1) - GLOBAL::EPS)
+      backV.push_back(topV.row(i));
   }
-  
+
   Eigen::MatrixXd vall;
   vall.resize(leftV.size() + rightV.size() + frontV.size() + backV.size(), 3);
   Eigen::VectorXi typeall;
@@ -492,9 +475,7 @@ void SliceStack::tetrahedralizeSlice (
   igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, params.str().c_str(), TV,TT,TF,TO);
   igl::writeOFF("foo_tet.off", TV, TF);
   printf("Tetrahedralize done\n");
-  printf("Number of faces before:%lu and after:%lu\n",
-         F.rows(), TF.rows());
-  
+  printf("Number of faces before:%lu and after:%lu\n", F.rows(), TF.rows());
 }
 
 void SliceStack::computeLaplace(int slice_no,
@@ -579,8 +560,7 @@ void SliceStack::computeLaplace(int slice_no,
 	// Empty Constraints
 	Eigen::VectorXd Beq;
 	Eigen::SparseMatrix<double> Aeq;
-	bool success = 
-			igl::min_quad_with_fixed_precompute(L,known,Aeq,false,mqwf);
+	bool success = igl::min_quad_with_fixed_precompute(L, known, Aeq, false, mqwf);
 	if(!success)
 		fprintf(stderr,"ERROR: fixed_precompute didn't work!\n");
 	igl::min_quad_with_fixed_solve(mqwf,B,known_c,Beq, Z);
