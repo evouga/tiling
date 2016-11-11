@@ -278,44 +278,39 @@ void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
   */
 }
 
+// Can pass in topverts, topfaces, and toporig if you want to use them.
 void getOffsetSurface(int bot_slice_no, SliceStack &ss,
+                      Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, Eigen::VectorXi &botorig,
+                      Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces, Eigen::VectorXi &toporig,
                       Eigen::MatrixXd &offsetV, Eigen::MatrixXi &offsetF,
                       Eigen::VectorXi &orig,
                       bool view=false) {
 
   igl::viewer::Viewer v;
-
-  Eigen::MatrixXd botverts;
-  Eigen::MatrixXd topverts;
-  Eigen::MatrixXi botfaces;
-  Eigen::MatrixXi topfaces;
-	Eigen::VectorXi toporig;
-	Eigen::VectorXi botorig;
-  //                                      don't scale
-  ss.triangulateSlice(bot_slice_no, 0.005, false,
+  ss.triangulateSlice(bot_slice_no, 0.005,
                       botverts, botfaces, topverts, topfaces,
 											botorig, toporig);
 
   if (view) {
     Eigen::MatrixXd C;
-    igl::jet(toporig, true, C);
-    v.data.set_mesh(topverts, topfaces);
+    igl::jet(botorig, true, C);
+    v.data.set_mesh(botverts, botfaces);
     v.data.set_face_based(true);
     //v.data.set_colors(C);
-    for (int i = 0; i < toporig.rows(); ++i) {
-      if (toporig(i) == 0) {
-        v.data.add_label(topverts.row(i), "o");
-      } else if (toporig(i) == 1) {
-        v.data.add_label(topverts.row(i), "x");
+    for (int i = 0; i < botorig.rows(); ++i) {
+      if (botorig(i) == 0) {
+        v.data.add_label(botverts.row(i), "o");
+      } else if (botorig(i) == 1) {
+        v.data.add_label(botverts.row(i), "x");
       } else {
-        v.data.add_label(topverts.row(i), to_string(toporig(i)));
+        v.data.add_label(botverts.row(i), to_string(botorig(i)));
       }
     }
     v.launch();
 
     Eigen::MatrixXd allverts;
     Eigen::MatrixXi allfaces;
-    combineMeshes(botverts, botfaces, topverts, topfaces,
+    combineMeshes_2(botverts, botfaces, topverts, topfaces,
                   allverts, allfaces, false);
     v.data.clear();
     v.data.set_mesh(allverts, allfaces);
@@ -409,9 +404,26 @@ int main(int argc, char *argv[])
   Eigen::MatrixXd bV, tV;
   Eigen::MatrixXi bF, tF;
   Eigen::VectorXi borig, torig;
-  getOffsetSurface(good_start, ss, bV, bF, borig, false);
+
+  Eigen::MatrixXd topverts, botverts;
+  Eigen::MatrixXi topfaces, botfaces;
+  Eigen::VectorXi toporig, botorig;
+
+  getOffsetSurface(good_start, ss, 
+                   botverts, botfaces, botorig,
+                   topverts, topfaces, toporig,
+                   bV, bF, borig, true);
   good_start++;
-  getOffsetSurface(good_start, ss, tV, tF, torig, false);
+  // Next time's bottom will be last time's top.
+  botverts = topverts;
+  botfaces = topfaces;
+  botorig = toporig;
+
+  // Get the next cube, using stuff from last time.
+  getOffsetSurface(good_start, ss,
+                   botverts, botfaces, botorig,
+                   topverts, topfaces, toporig,
+                   tV, tF, torig, true);
 
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;

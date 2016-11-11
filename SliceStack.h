@@ -16,7 +16,7 @@ public:
 
 	int getNumSlices() {return numSlices_;}
 
-	void triangulateSlice(int bottomidx, double areaBound, bool scale,
+	void triangulateSlice(int bottomidx, double areaBound,
 		Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, 
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
 		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig);
@@ -53,6 +53,7 @@ private:
 	int numSlices_;
 	std::vector<Slice *> slices_;
 	std::vector<double> heights_;
+  Eigen::MatrixXd bbox_;
 
   // Variable used by triangle to determine the maximum area of each triangle.
   // See -a flag. Lower value creates smaller triangles. With "hack" in place

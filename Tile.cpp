@@ -18,61 +18,13 @@ using namespace std;
 
 const double Tile::tilePadding_ = 0.10;
 
-Tile::Tile(const Slice &bottom, const Slice &top, bool scale) : bottom_(bottom), top_(top), use_scaling_(scale)
-{
-	computeCubeTransformation();
-}
+Tile::Tile(const Slice &bottom, const Slice &top, const Eigen::MatrixXd &bbox) 
+    : bottom_(bottom), top_(top), bbox_(bbox)
+{ }
 
 Tile::~Tile()
 {
 }
-
-void Tile::computeCubeTransformation()
-{
-	Vector2d mins;
-	Vector2d maxs;
-	for(int i=0; i<2; i++)
-	{
-		mins[i] = numeric_limits<double>::infinity();
-		maxs[i] = -numeric_limits<double>::infinity();
-	}
-	int numbottomcontours = bottom_.contours.size();
-	for(int i=0; i<numbottomcontours; i++)
-	{
-		int numpts = bottom_.contours[i].x.size();
-		for(int j=0; j<numpts; j++)
-		{
-			mins[0] = min(mins[0], bottom_.contours[i].x[j]);
-			maxs[0] = max(maxs[0], bottom_.contours[i].x[j]);
-			mins[1] = min(mins[1], bottom_.contours[i].y[j]);
-			maxs[1] = max(maxs[1], bottom_.contours[i].y[j]);
-		}
-	}
-	int numtopcontours = top_.contours.size();
-	for(int i=0; i<numtopcontours; i++)
-	{
-		int numpts = top_.contours[i].x.size();
-		for(int j=0; j<numpts; j++)
-		{
-			mins[0] = min(mins[0], top_.contours[i].x[j]);
-			maxs[0] = max(maxs[0], top_.contours[i].x[j]);
-			mins[1] = min(mins[1], top_.contours[i].y[j]);
-			maxs[1] = max(maxs[1], top_.contours[i].y[j]);
-		}
-	}
-  if (use_scaling_) {
-    translate_ = -GLOBAL::z_lim*(mins+maxs);
-    Vector2d widths =  (1.0 + tilePadding_)*(maxs-mins);
-    scale_.setZero();
-    scale_(0,0) = 1.0/widths[0];
-    scale_(1,1) = 1.0/widths[1];
-  } else {
-    translate_.setZero();
-    scale_.setZero();
-    scale_(0,0) = 1;
-    scale_(1,1) = 1;
-  }
-}	
 
 /*
 // Will resize V and E to fit
@@ -99,19 +51,13 @@ void Tile::getOrig(Eigen::MatrixXd &Vtop, Eigen::MatrixXd &Vbot) {
 }
 */
 
-void Tile::scale(Vector2d &pt) {
-	pt = scale_*(pt+translate_);
-}
-
-void Tile::unscale(Vector2d &pt) {
-	pt = scale_.inverse()*pt - translate_;
-}
-
 // Adds original points to V and E. Should be already the correct size
 int Tile::addOrig(const Slice &s, 
 									Eigen::MatrixXd &V, Eigen::MatrixXi &E,
 									Eigen::VectorXi &VM, Eigen::VectorXi &EM,
-									int offset) {
+									Eigen::MatrixXd &lims, int offset) {
+  bool first = true;
+  lims.resize(2, 2);
 	int numcontours = s.contours.size();
 	for(int i=0; i<numcontours; i++)
 	{
@@ -119,8 +65,6 @@ int Tile::addOrig(const Slice &s,
 		for(int j=0; j<numpts; j++)
 		{
 			Vector2d pt(s.contours[i].x[j], s.contours[i].y[j]);
-			//V.row(offset+j) = scale_*(pt+translate_);
-			scale(pt);
 			V(offset+j, 0) = pt(0);
 			V(offset+j, 1) = pt(1);
 			int prev = (j == 0 ? numpts-1 : j-1);
@@ -128,6 +72,16 @@ int Tile::addOrig(const Slice &s,
 			E(offset+j, 1) = offset + prev;
 			VM(offset+j) = GLOBAL::original_marker;
 			EM(offset+j) = GLOBAL::original_marker;
+      if (first) {
+        lims(0, 0) = lims(0, 1) = pt(0);
+        lims(1, 0) = lims(1, 1) = pt(1);
+        first = false;
+      } else {
+        lims(0, 0) = min(lims(0, 0), pt(0));
+        lims(0, 1) = max(lims(0, 1), pt(0));
+        lims(1, 0) = min(lims(1, 0), pt(1));
+        lims(1, 1) = max(lims(1, 1), pt(1));
+      }
 		}
 		offset += numpts;
 	}
@@ -158,6 +112,7 @@ void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
 	}
 }
 
+// Triangulates a single contour.
 void Tile::triangulateSlice(const Slice &s, 
                             double xmin, double xmax,
                             double ymin, double ymax,
@@ -168,14 +123,14 @@ void Tile::triangulateSlice(const Slice &s,
 	int numcontours = s.contours.size();
 	cout << "num contours: " << numcontours << endl;
 	int totpts = s.getNumPts();
-	
 
 	MatrixXd V(totpts+4, 2);
 	MatrixXi E(totpts+4, 2);
 	MatrixXd H(0, 2);
 	VectorXi VM(totpts+4);
 	VectorXi EM(totpts+4);
-
+  
+  /*
   V(0,0) = xmin;
   V(0,1) = ymin;
   V(1,0) = xmax;
@@ -192,18 +147,53 @@ void Tile::triangulateSlice(const Slice &s,
 	E(2,1) = 3;
 	E(3,0) = 3;
 	E(3,1) = 0;
-	VM(0) = 0;
-	VM(1) = 0;
-	VM(2) = 0;
-	VM(3) = 0;
-	EM(0) = 0;
-	EM(1) = 0;
-	EM(2) = 0;
-	EM(3) = 0;
-
+	VM(0) = GLOBAL::nonoriginal_marker;
+	VM(1) = GLOBAL::nonoriginal_marker;
+	VM(2) = GLOBAL::nonoriginal_marker;
+	VM(3) = GLOBAL::nonoriginal_marker;
+	EM(0) = GLOBAL::nonoriginal_marker;
+	EM(1) = GLOBAL::nonoriginal_marker;
+	EM(2) = GLOBAL::nonoriginal_marker;
+	EM(3) = GLOBAL::nonoriginal_marker;
 	addOrig(s, V,E,VM,EM, 4);
+  */
 
-	cout << "Rendering triangle here...\n";
+  Eigen::MatrixXd lims;
+	addOrig(s, V,E,VM,EM, lims, 0);
+  cout << "Lims are  min:" << endl << V.col(0) << "\nmax:" << endl << V.col(1) << endl;
+  cout << "\nvs x " << xmin << "," << xmax;
+  cout << " y " << ymin << "," << ymax;
+  // Give a gap of 5% of the total area around each vertex.
+  auto mins = V.colwise().minCoeff();
+  auto maxs = V.colwise().maxCoeff();
+  auto gaps = (maxs - mins) * GLOBAL::padding_perc;
+  // Add the bounding points after adding the original ones.
+  V(totpts,0) = lims(0, 0) - gaps(0);
+  V(totpts,1) = lims(1, 0) - gaps(1);
+  V(totpts + 1,0) = lims(0, 1) + gaps(0);
+  V(totpts + 1,1) = lims(1, 0) - gaps(1);
+  V(totpts + 2,0) = lims(0, 1) + gaps(0);
+  V(totpts + 2,1) = lims(1, 1) + gaps(1);
+  V(totpts + 3,0) = lims(0, 0) - gaps(0);
+  V(totpts + 3,1) = lims(1, 1) + gaps(1);
+	E(totpts + 0,0) = totpts + 0;
+	E(totpts + 0,1) = totpts + 1;
+	E(totpts + 1,0) = totpts + 1;
+	E(totpts + 1,1) = totpts + 2;
+	E(totpts + 2,0) = totpts + 2;
+	E(totpts + 2,1) = totpts + 3;
+	E(totpts + 3,0) = totpts + 3;
+	E(totpts + 3,1) = totpts + 0;
+	VM(totpts + 0) = GLOBAL::nonoriginal_marker;
+	VM(totpts + 1) = GLOBAL::nonoriginal_marker;
+	VM(totpts + 2) = GLOBAL::nonoriginal_marker;
+	VM(totpts + 3) = GLOBAL::nonoriginal_marker;
+	EM(totpts + 0) = GLOBAL::nonoriginal_marker;
+	EM(totpts + 1) = GLOBAL::nonoriginal_marker;
+	EM(totpts + 2) = GLOBAL::nonoriginal_marker;
+	EM(totpts + 3) = GLOBAL::nonoriginal_marker;
+	
+  cout << "Rendering triangle here...\n";
 	/*
 	igl::viewer::Viewer viewer;
 	vector<string> labels;
@@ -245,30 +235,27 @@ void Tile::triangulateSlices(double areaBound,
 		Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
 		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig)
 {
-  double xmin,xmax, ymin,ymax;
-  if (use_scaling_) {
-    xmin = ymin = -0.5;
-    xmax = ymax = 0.5;
-  } else {
-    bottom_.xminmax(xmin,xmax);
-    bottom_.yminmax(ymin,ymax);
-    double txmin,txmax, tymin,tymax;
-    top_.xminmax(txmin,txmax);
-    top_.yminmax(tymin,tymax);
-    xmin = min(xmin, txmin);
-    xmax = max(xmax, txmax);
-    ymin = min(ymin, tymin);
-    ymax = max(ymax, tymax);
-  }
+  double xmin = bbox_(0, 0), xmax = bbox_(0, 1),
+         ymin = bbox_(1, 0), ymax = bbox_(1, 1);
 
   double thickness = bottom_.thickness;
+  printf("Bounding box is x:%lf,%lf, y:%lf,%lf, z:%lf\n",
+         xmin,xmax, ymin,ymax, thickness);
+  double xgap = (xmax - xmin) * GLOBAL::padding_perc;
+  double ygap = (ymax - ymin) * GLOBAL::padding_perc;
+  // If the bottom vertices is not empty, just use what you have.
+  if (botverts.rows() == 0) {
+    triangulateSlice(bottom_, xmin - xgap, xmax + xgap,
+                     ymin - ygap, ymax + ygap, 0,
+                     areaBound, botverts, botfaces, bot_orig);
+  }
+  double prev_z = botverts(0, 2);
 #ifdef ZSCALE_HACK
-  thickness = (std::max(ymax, xmax) - std::min(ymin, xmin)) / 2.0;
+  thickness = (botverts.colwise().maxCoeff() - botverts.colwise().minCoeff()).maxCoeff();
   printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
          __FILE__, __LINE__, thickness, bottom_.thickness);
 #endif
-	triangulateSlice(bottom_, xmin,xmax, ymin,ymax, -thickness/2.0,
-                   areaBound, botverts, botfaces, bot_orig);
-	triangulateSlice(top_, xmin,xmax, ymin,ymax, thickness/2.0,
+  triangulateSlice(top_, xmin - xgap, xmax + xgap,
+                   ymin - ygap,ymax + ygap, prev_z + thickness,
                    areaBound, topverts, topfaces, top_orig);
 }

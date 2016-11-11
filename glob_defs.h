@@ -3,6 +3,7 @@
 // Avoid the use of magic numbers and multiple defines. Put all the globally-
 // used numbers in here.
 namespace GLOBAL {
+  const float padding_perc = 0.05;
 
   // Values defined on the min- and max-z-axis extremes. Inside temp is the
   // temperature inside the contour, and outside temp is the value outside.
