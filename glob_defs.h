@@ -25,10 +25,11 @@ namespace GLOBAL {
   const int nonoriginal_marker = 1;
 
   // Used to compare doubles.
-  const double EPS = 1e-2;
+  const double EPS = 1e-5;
 
   // Number of extra points to add to sides of the unit cube.
-  const int EXTRA = 10;
+  // TODO: relate this to thickness.
+  const int EXTRA = 20;
 }
 
 #endif

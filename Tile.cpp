@@ -210,6 +210,7 @@ void Tile::triangulateSlices(double areaBound,
   double xgap = (xmax - xmin) * GLOBAL::padding_perc,
          ygap = (ymax - ymin) * GLOBAL::padding_perc;
 
+
   double xMinPadded = xmin - xgap,
          xMaxPadded = xmax + xgap,
          yMinPadded = ymin - ygap,

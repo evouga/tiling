@@ -9,8 +9,6 @@
 using namespace std;
 using namespace tinyxml2;
 
-
-
 void removeDuplicateVerts(Contour &c)
 {
 	vector<double> newx;
@@ -66,22 +64,23 @@ class ContourVisitor : public XMLVisitor
 	const char *contourname;
 };
 
-Slice *readSlice(const char *filename, const char *objectname)
-{
+Slice *readSlice(const char *filename, const char *objectname) {
 	ContourVisitor cv(objectname);
 	XMLDocument doc;
+
 	if(doc.LoadFile(filename))
 		return NULL;
+
 	doc.Accept(&cv);
-	Slice *result = new Slice;
-	result->contours = cv.contours;
-	if(doc.FirstChildElement("Section")->QueryDoubleAttribute("thickness", &result->thickness) != XML_NO_ERROR)
-	{
-		delete result;
+
+  double thickness;
+
+	if(doc.FirstChildElement("Section")->QueryDoubleAttribute("thickness", &thickness) != XML_NO_ERROR) {
     printf("Returning NULL from %s:%d\n", __FILE__, __LINE__);
 		return NULL;
 	}
-	return result;
+
+	return new Slice(cv.contours, thickness);
 }
 
 void readSlicesFromFolder(const char *baseFilename, const char *objectname, vector<Slice *> &slices)

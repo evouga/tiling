@@ -426,7 +426,6 @@ int main(int argc, char *argv[]) {
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
                    tV, tF, torig, true);
-  assert(false);
 
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;

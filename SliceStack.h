@@ -8,13 +8,14 @@
 
 class Slice;
 
-class SliceStack
-{
+class SliceStack {
 public:
 	SliceStack(const char *baseFilename, const char *objectname);
 	~SliceStack();
 
-	int getNumSlices() {return numSlices_;}
+	int getNumSlices() {
+    return numSlices_;
+  }
 
 	void triangulateSlice(int bottomidx, double areaBound,
                         Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces,

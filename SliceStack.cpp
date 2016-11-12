@@ -30,23 +30,24 @@ SliceStack::SliceStack(const char *baseFilename, const char *objectname) {
   numSlices_ = slices_.size();
 
   double z = 0.0;
-  double xmin = numeric_limits<double>::max();
-  double xmax = numeric_limits<double>::min();
-  double ymin = numeric_limits<double>::max();
-  double ymax = numeric_limits<double>::min();
+  double minX = numeric_limits<double>::max();
+  double maxX = numeric_limits<double>::min();
+  double minY = numeric_limits<double>::max();
+  double maxY = numeric_limits<double>::min();
 
-  for(int i=0; i<numSlices_; i++)
-  {
+  for(int i=0; i<numSlices_; i++) {
     heights_.push_back(z);
     z += slices_[i]->thickness;
-    slices_[i]->xminmax(xmin, xmax);
-    slices_[i]->yminmax(ymin, ymax);
+    minX = min(minX, slices_[i]->minX);
+    maxX = max(maxX, slices_[i]->maxX);
+    minY = min(minY, slices_[i]->minY);
+    maxY = max(maxY, slices_[i]->maxY);
   }
 
   // 3x2
   bbox_.resize(3, 2);
-  bbox_.row(0) << xmin, xmax;
-  bbox_.row(1) << ymin, ymax;
+  bbox_.row(0) << minX, maxX;
+  bbox_.row(1) << minY, maxY;
   bbox_.row(2) << 0, z;
 }
 
@@ -316,21 +317,22 @@ void SliceStack::tetrahedralizeSlice (
 
   triangulateSide(0, ymin,ymax, xmin,xmax, leftV, leftTriV, leftTriF);
 	flipNormal(leftTriF);
-  v.data.set_mesh(leftTriV, leftTriF);
-  v.launch();
+  // v.data.clear();
+  // v.data.set_mesh(leftTriV, leftTriF);
+  // v.launch();
   triangulateSide(2, xmin,xmax, ymin,ymax, frontV, frontTriV, frontTriF);
-  v.data.clear();
-  v.data.set_mesh(frontTriV, frontTriF);
-  v.launch();
+  // v.data.clear();
+  // v.data.set_mesh(frontTriV, frontTriF);
+  // v.launch();
   triangulateSide(1, ymin,ymax, xmin,xmax, rightV, rightTriV, rightTriF);
-  v.data.clear();
-  v.data.set_mesh(rightTriV, rightTriF);
-  v.launch();
+  // v.data.clear();
+  // v.data.set_mesh(rightTriV, rightTriF);
+  // v.launch();
   triangulateSide(3, xmin,xmax, ymin,ymax, backV, backTriV, backTriF);
 	flipNormal(backTriF);
-  v.data.clear();
-  v.data.set_mesh(backTriV, backTriF);
-  v.launch();
+  // v.data.clear();
+  // v.data.set_mesh(backTriV, backTriF);
+  // v.launch();
 
 	// Can't count points duplicate times
 
@@ -479,10 +481,10 @@ void SliceStack::tetrahedralizeSlice (
 }
 
 void SliceStack::computeLaplace(int slice_no,
-																const Eigen::MatrixXd &TV,
-																const Eigen::MatrixXi &TT,
-																const Eigen::MatrixXi &TF,
-																const Eigen::VectorXi &TO,
+                                const Eigen::MatrixXd &TV,
+                                const Eigen::MatrixXi &TT,
+                                const Eigen::MatrixXi &TF,
+                                const Eigen::VectorXi &TO,
                                 Eigen::VectorXd &Z) {
   bool laplace_DEBUG = true;
 
