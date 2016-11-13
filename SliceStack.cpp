@@ -97,22 +97,20 @@ bool customSortByZ(const Eigen::Vector3d a, const Eigen::Vector3d b) {
 // also include the minimum and maximum values in the non-constant coord (mn, mx)
 // and the minimum and maximum values for this coord (o_mn, o_mx)
 void SliceStack::triangulateSide(int constantCoord,
-                                 double mn, double mx,
-                                 double o_mn, double o_mx,
+                                 double fixedCoord,
                                  vector<Eigen::Vector3d> &verts,
                                  Eigen::MatrixXd &V, Eigen::MatrixXi &F) {
-
+  // Compute the mid z-coord.
   sort(verts.begin(), verts.end(), customSortByZ);
 
-  vector<Eigen::Vector3d> topV;
-  vector<Eigen::Vector3d> botV;
-
-  // Compute the mid z-coord
   double mid = 0;
   for (const auto & v : verts) {
     mid += v(2);
   }
   mid /= verts.size();
+
+  vector<Eigen::Vector3d> topV;
+  vector<Eigen::Vector3d> botV;
 
   // Fill the botV and topV vectors
   for (int i = 0; i < verts.size(); ++i) {
@@ -126,7 +124,7 @@ void SliceStack::triangulateSide(int constantCoord,
   double z_spacing = verts.back()(2) - verts.front()(2);
 
   // If the constant coord is y, sort by x direction.
-  if (constantCoord >= 2) {
+  if (constantCoord == GLOBAL::FRONT || constantCoord == GLOBAL::BACK) {
     sort(botV.begin(), botV.end(), customSortByX);
     sort(topV.rbegin(), topV.rend(), customSortByX); // backwards
   }
@@ -136,15 +134,15 @@ void SliceStack::triangulateSide(int constantCoord,
     sort(topV.rbegin(), topV.rend(), customSortByY); // backwards
   }
 
-  Eigen::MatrixXd inputV(verts.size() + GLOBAL::EXTRA*2, 2);
-  Eigen::MatrixXi inputE(verts.size() + GLOBAL::EXTRA*2, 2);
+  Eigen::MatrixXd inputV(verts.size() + GLOBAL::EXTRA * 2, 2);
+  Eigen::MatrixXi inputE(verts.size() + GLOBAL::EXTRA * 2, 2);
   Eigen::MatrixXd H(0, 2);
 
   int offset = 0;
 
   // Add bottom points, from left to right
   for (int i = 0; i < botV.size(); ++i) {
-    if (constantCoord < 2) {
+    if (constantCoord == GLOBAL::LEFT || constantCoord == GLOBAL::RIGHT) {
       inputV.row(offset++) << botV[i][1], botV[i][2];
     } else {
       inputV.row(offset++) << botV[i][0], botV[i][2];
@@ -156,63 +154,78 @@ void SliceStack::triangulateSide(int constantCoord,
   Eigen::Vector3d bot2Top = topV.front() - botV.back(); // top is sorted backwards
   for (int i = 1; i <= GLOBAL::EXTRA; ++i) {
     auto shift_by = botV.back() + bot2Top * i / (GLOBAL::EXTRA + 1);
-    if (constantCoord >= 2) {  //constant is y
-      inputV.row(offset++) << shift_by(0), shift_by(2);
-    } else {  // constant is x
+    if (constantCoord == GLOBAL::LEFT || constantCoord == GLOBAL::RIGHT)
       inputV.row(offset++) << shift_by(1), shift_by(2);
-    }
-    //inputV.row(offset++) = 
-        //Eigen::Vector2d(mx, botV[0][2] + z_spacing / GLOBAL::EXTRA * i);
+    else
+      inputV.row(offset++) << shift_by(0), shift_by(2);
   }
 
   // Add top points, from right to left
   for (int i = 0; i < topV.size(); ++i) {
-    if (constantCoord >= 2) {
-      inputV.row(offset++) << topV[i][0], topV[i][2];
-    } else {
+    if (constantCoord == GLOBAL::LEFT || constantCoord == GLOBAL::RIGHT)
       inputV.row(offset++) << topV[i][1], topV[i][2];
-    }
+    else
+      inputV.row(offset++) << topV[i][0], topV[i][2];
   }
 
   // Add left points
   Eigen::Vector3d top2Bot = botV.front() - topV.back();
   for (int i = 1; i <= GLOBAL::EXTRA; ++i) {
     auto shift_by = topV.back() + top2Bot * i / (GLOBAL::EXTRA + 1);
-    if (constantCoord >= 2) {  //constant is y
-      inputV.row(offset++) << shift_by(0), shift_by(2);
-    } else {  // constant is x
+    if (constantCoord == GLOBAL::LEFT || constantCoord == GLOBAL::RIGHT)
       inputV.row(offset++) << shift_by(1), shift_by(2);
-    }
-    //inputV.row(offset++) =
-        //Eigen::Vector2d(mn, topV[0][2] - z_spacing / GLOBAL::EXTRA * i);
+    else
+      inputV.row(offset++) << shift_by(0), shift_by(2);
   }
 
+  // Add all the new edges.
   for (int i = 0; i < inputV.rows(); ++i) {
     inputE.row(i) << i, (i + 1) % (inputV.rows());
   }
 
   Eigen::MatrixXd tmpV;
 
-	cout << "Delaunay triangulating mesh with " << inputV.rows() << " verts" << endl;
   stringstream params;
-  params << "DYa" << triangle_max_area;
-  params << "q";
+  params << "DYa" << triangle_max_area << "q";
+
+	cout << "Delaunay triangulating mesh with " << inputV.rows() << " verts" << endl;
   cout << "parameters are " << params.str() << endl;
-	igl::triangle::triangulate(inputV,inputE,H,params.str().c_str(),tmpV,F);	
+
+	igl::triangle::triangulate(inputV, inputE, H, params.str().c_str(), tmpV, F);
+
 	cout << "done" << endl;
 
+  // 3D-ifying the slice.
   V.resize(tmpV.rows(), 3);
-
   for (int i = 0; i < tmpV.rows(); ++i) {
-    if (constantCoord == 0)
-      V.row(i) << o_mn, tmpV(i, 0), tmpV(i, 1);
-    else if (constantCoord == 1)
-      V.row(i) << o_mx, tmpV(i, 0), tmpV(i, 1);
-    else if (constantCoord == 2)
-      V.row(i) << tmpV(i, 0), o_mn, tmpV(i, 1);
-    else if (constantCoord == 3)
-      V.row(i) << tmpV(i, 0), o_mx, tmpV(i, 1);
+    switch(constantCoord) {
+      case GLOBAL::LEFT : V.row(i) << fixedCoord, tmpV(i, 0), tmpV(i, 1);
+                          break;
+      case GLOBAL::RIGHT : V.row(i) << fixedCoord, tmpV(i, 0), tmpV(i, 1);
+                           break;
+      case GLOBAL::FRONT : V.row(i) << tmpV(i, 0), fixedCoord, tmpV(i, 1);
+                           break;
+      case GLOBAL::BACK : V.row(i) << tmpV(i, 0), fixedCoord, tmpV(i, 1);
+                          break;
+    }
   }
+
+  // Find the projection to map the corners back.
+  Eigen::MatrixXd XT(3, 3);
+  XT << V.row(0),
+        V.row(botV.size() - 1),
+        V.row(botV.size() + GLOBAL::EXTRA);
+
+  Eigen::MatrixXd X = XT.transpose();
+
+  Eigen::MatrixXd B(3, 3);
+  B.col(0) << botV[0];
+  B.col(1) << botV[botV.size()-1];
+  B.col(2) << topV[0];
+
+  Eigen::MatrixXd A = B * X.inverse();
+
+  V = (A * V.transpose()).transpose();
 }
 
 void SliceStack::flipNormal(Eigen::MatrixXi &f) {
@@ -221,6 +234,18 @@ void SliceStack::flipNormal(Eigen::MatrixXi &f) {
 		f(i,0) = f(i,2);
 		f(i,2) = temp;
 	}
+}
+
+void relabelFaces(Eigen::MatrixXi& aggregated,
+                  const Eigen::MatrixXd& vertices,
+                  const Eigen::MatrixXi& faces,
+                  Eigen::Vector3i& vertexOffset,
+                  int& offset) {
+  for (int i = 0; i < faces.rows(); i++) {
+    aggregated.row(offset++) = vertexOffset + Eigen::Vector3i(faces.row(i));
+  }
+  int numVerts = vertices.rows();
+  vertexOffset += Eigen::Vector3i(numVerts, numVerts, numVerts);
 }
 
 void SliceStack::tetrahedralizeSlice (
@@ -278,69 +303,37 @@ void SliceStack::tetrahedralizeSlice (
       backV.push_back(topV.row(i));
   }
 
-  Eigen::MatrixXd vall;
-  vall.resize(leftV.size() + rightV.size() + frontV.size() + backV.size(), 3);
-  Eigen::VectorXi typeall;
-  typeall.resize(vall.rows());
-  for (int i = 0; i < vall.rows(); ++i) {
-    if (i < leftV.size()) {
-      typeall(i) = 0;
-      vall.row(i) = leftV[i];
-    } else if (i < leftV.size() + rightV.size()) {
-      typeall(i) = 1;
-      vall.row(i) = rightV[i - leftV.size()];
-    } else if (i < leftV.size() + rightV.size() + frontV.size()) {
-      typeall(i) = 2;
-      vall.row(i) = frontV[i - rightV.size() - leftV.size()];
-    } else {
-      typeall(i) = 3;
-      vall.row(i) = backV[i - leftV.size() - rightV.size() - frontV.size()];
-    }
-  }
-  Eigen::MatrixXd colsall;
-	igl::jet(typeall, true, colsall);
-  igl::viewer::Viewer v;
-  v.data.set_points(vall, colsall);
-  v.launch();
-
   Eigen::MatrixXd leftTriV;
   Eigen::MatrixXi leftTriF;
-
-  Eigen::MatrixXd rightTriV;
-  Eigen::MatrixXi rightTriF;
-
-  Eigen::MatrixXd backTriV;
-  Eigen::MatrixXi backTriF;
+  triangulateSide(GLOBAL::LEFT, xmin, leftV, leftTriV, leftTriF);
+	flipNormal(leftTriF);
 
   Eigen::MatrixXd frontTriV;
   Eigen::MatrixXi frontTriF;
+  triangulateSide(GLOBAL::FRONT, ymin, frontV, frontTriV, frontTriF);
 
-  triangulateSide(0, ymin,ymax, xmin,xmax, leftV, leftTriV, leftTriF);
-	flipNormal(leftTriF);
-  // v.data.clear();
-  // v.data.set_mesh(leftTriV, leftTriF);
-  // v.launch();
-  triangulateSide(2, xmin,xmax, ymin,ymax, frontV, frontTriV, frontTriF);
-  // v.data.clear();
-  // v.data.set_mesh(frontTriV, frontTriF);
-  // v.launch();
-  triangulateSide(1, ymin,ymax, xmin,xmax, rightV, rightTriV, rightTriF);
-  // v.data.clear();
-  // v.data.set_mesh(rightTriV, rightTriF);
-  // v.launch();
-  triangulateSide(3, xmin,xmax, ymin,ymax, backV, backTriV, backTriF);
+  Eigen::MatrixXd rightTriV;
+  Eigen::MatrixXi rightTriF;
+  triangulateSide(GLOBAL::RIGHT, xmax, rightV, rightTriV, rightTriF);
+
+  Eigen::MatrixXd backTriV;
+  Eigen::MatrixXi backTriF;
+  triangulateSide(GLOBAL::BACK, ymax, backV, backTriV, backTriF);
 	flipNormal(backTriF);
-  // v.data.clear();
-  // v.data.set_mesh(backTriV, backTriF);
-  // v.launch();
 
 	// Can't count points duplicate times
-
-  int totalVertices = topV.rows() + botV.rows() + 
-    leftTriV.rows() + rightTriV.rows() + backTriV.rows() + frontTriV.rows();
-
-  int totalFaces = topF.rows() + botF.rows() + 
-    leftTriF.rows() + rightTriF.rows() + backTriF.rows() + frontTriF.rows();
+  int totalVertices = topV.rows() +
+                      botV.rows() +
+                      leftTriV.rows() +
+                      rightTriV.rows() +
+                      backTriV.rows() +
+                      frontTriV.rows();
+  int totalFaces = topF.rows() +
+                   botF.rows() +
+                   leftTriF.rows() +
+                   rightTriF.rows() +
+                   backTriF.rows() +
+                   frontTriF.rows();
 
   Eigen::MatrixXd V_rep(totalVertices, 3);
 	Eigen::VectorXi M_rep(totalVertices);
@@ -390,7 +383,7 @@ void SliceStack::tetrahedralizeSlice (
 	// contains mapping from all indices to unique
 	// Size: #V_rep
 	Eigen::VectorXi all_to_unique;
-	igl::unique_rows(V_rep, V,unique_to_all,all_to_unique);
+	igl::unique_rows(V_rep, V, unique_to_all, all_to_unique);
 	//printf("Size of unique is now: %ld vs %ld\n", V_rep.rows(), V.rows());
 	//printf("Sizes are %ld,%ld\n", unique_to_all.rows(), all_to_unique.rows());
 
@@ -400,69 +393,41 @@ void SliceStack::tetrahedralizeSlice (
 		//printf("Changing index %d to %d\n", i, unique_to_all(i));
 		M(i) = M_rep(unique_to_all(i));
 	}
-  
+
 	// Add the faces
   Eigen::MatrixXi F(totalFaces, 3);
-  Eigen::Vector3i vertexOffset(0, 0, 0);
   offset = 0;
+  Eigen::Vector3i vertexOffset(0, 0, 0);
 
-  for (int i = 0; i < botF.rows(); ++i) {
-    F.row(offset++) = botF.row(i);
-  }
-
-  vertexOffset += Eigen::Vector3i(botV.rows(), botV.rows(), botV.rows());
-
-  for (int i = 0; i < topF.rows(); ++i) {
-    F.row(offset++) = vertexOffset + Eigen::Vector3i(topF.row(i));
-  }
-
-  vertexOffset += Eigen::Vector3i(topV.rows(), topV.rows(), topV.rows());
-
-  for (int i = 0; i < leftTriF.rows(); ++i) {
-    F.row(offset++) = vertexOffset + Eigen::Vector3i(leftTriF.row(i));
-  }
-
-  vertexOffset += Eigen::Vector3i(leftTriV.rows(), leftTriV.rows(), leftTriV.rows());
-
-  for (int i = 0; i < rightTriF.rows(); ++i) {
-    F.row(offset++) = vertexOffset + Eigen::Vector3i(rightTriF.row(i));
-  }
-
-  vertexOffset += Eigen::Vector3i(rightTriV.rows(), rightTriV.rows(), rightTriV.rows());
-
-  for (int i = 0; i < frontTriF.rows(); ++i) {
-    F.row(offset++) = vertexOffset + Eigen::Vector3i(frontTriF.row(i));
-  }
-
-  vertexOffset += Eigen::Vector3i(frontTriV.rows(), frontTriV.rows(), frontTriV.rows());
-
-  for (int i = 0; i < backTriF.rows(); ++i) {
-    F.row(offset++) = vertexOffset + Eigen::Vector3i(backTriF.row(i));
-  }
+  relabelFaces(F, botV, botF, vertexOffset, offset);
+  relabelFaces(F, topV, topF, vertexOffset, offset);
+  relabelFaces(F, leftTriV, leftTriF, vertexOffset, offset);
+  relabelFaces(F, rightTriV, rightTriF, vertexOffset, offset);
+  relabelFaces(F, frontTriV, frontTriF, vertexOffset, offset);
+  relabelFaces(F, backTriV, backTriF, vertexOffset, offset);
 
 	// Make sure the faces point to the correct (unique) points
 	for (int i = 0; i < F.rows(); ++i) {
 		for (int j = 0; j < F.row(i).cols(); ++j) {
-			F(i,j) = all_to_unique(F(i,j));
+			F(i, j) = all_to_unique(F(i, j));
 		}
 	}
-	
 
   //igl::writeOFF("foo.off", V, F);
 
 	Eigen::VectorXi FM(F.rows());
 	for (int i = 0; i < F.rows(); ++i) {
-		if (M(F(i,0)) == GLOBAL::original_marker && 
-        M(F(i,1)) == GLOBAL::original_marker && 
+		if (M(F(i,0)) == GLOBAL::original_marker &&
+        M(F(i,1)) == GLOBAL::original_marker &&
         M(F(i,2)) == GLOBAL::original_marker) {
 			FM(i) = GLOBAL::original_marker;
 		} else {
 			FM(i) = GLOBAL::nonoriginal_marker;
 		}
 	}
-  // Tetrahedralized interior
 
-  //igl::viewer::Viewer v;
+  // Tetrahedralized interior
+  igl::viewer::Viewer v;
   v.data.clear();
   v.data.set_mesh(V, F);
   v.launch();
@@ -472,8 +437,7 @@ void SliceStack::tetrahedralizeSlice (
 	// TF will have the "" face indices (#V x 3)
 	// TO will have the "" vertex markers
   stringstream params;
-  params << "pq" << tetgen_max_rad_ratio;
-  params << "Y";
+  params << "pq" << tetgen_max_rad_ratio << "Y";
   igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, params.str().c_str(), TV,TT,TF,TO);
   igl::writeOFF("foo_tet.off", TV, TF);
   printf("Tetrahedralize done\n");

@@ -244,9 +244,9 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   double difference;
 
   // Set the original rows to zero in the Laplace matrix
-  L.prune([&orig](int r, int c, float) { 
-          return (orig(r) != GLOBAL::original_marker);// || (r == c); 
-         });
+  L.prune([&orig](int r, int c, float) {
+    return (orig(r) != GLOBAL::original_marker);// || (r == c);
+  });
 
   igl::viewer::Viewer v;
   do {

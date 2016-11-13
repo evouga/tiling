@@ -23,11 +23,9 @@ public:
                         Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig);
 
   // Triangulate the side, keeping a certain constant coordinate (see .cpp file)
-  // Include the min and the max for the non-constant coord (mn,mx) and
-  // the min and the max for the constant coord (o_mn, o_mx)
+  // All of these points will be along fixedCoord.
   void triangulateSide(int constantCoord,
-                       double mn, double mx,
-                       double o_mn, double o_mx,
+                       double fixedCoord,
                        std::vector<Eigen::Vector3d> &verts,
                        Eigen::MatrixXd &V, Eigen::MatrixXi &F);
 

@@ -298,7 +298,7 @@ void getOffsetSurface(int bot_slice_no, SliceStack &ss,
     igl::jet(botorig, true, C);
     v.data.set_mesh(botverts, botfaces);
     v.data.set_face_based(true);
-    //v.data.set_colors(C);
+    v.data.set_colors(C);
     for (int i = 0; i < botorig.rows(); ++i) {
       if (botorig(i) == 0) {
         v.data.add_label(botverts.row(i), "o");
@@ -308,8 +308,6 @@ void getOffsetSurface(int bot_slice_no, SliceStack &ss,
         v.data.add_label(botverts.row(i), to_string(botorig(i)));
       }
     }
-    v.launch();
-
     Eigen::MatrixXd allverts;
     Eigen::MatrixXi allfaces;
     combineMeshes_2(botverts, botfaces, topverts, topfaces,

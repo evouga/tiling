@@ -19,7 +19,7 @@ using namespace std;
 const double Tile::tilePadding_ = 0.10;
 
 Tile::Tile(const Slice &bottom, const Slice &top, const Eigen::MatrixXd &bbox)
-    : bottom_(bottom), top_(top), bbox_(bbox)
+  : bottom_(bottom), top_(top), bbox_(bbox)
 { }
 
 Tile::~Tile()
@@ -113,8 +113,6 @@ void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
 
 // Triangulates a single contour.
 void Tile::triangulateSlice(const Slice &s,
-                            double xmin, double xmax,
-                            double ymin, double ymax,
                             double z, double areaBound,
 														Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
 														Eigen::VectorXi &orig) {
@@ -133,10 +131,12 @@ void Tile::triangulateSlice(const Slice &s,
 	addOrig(s, V, E, VM, EM, lims, 0);
 
   // Add the bounding points after adding the original ones.
-  V.row(totpts + 0) << xmin, ymin;
-  V.row(totpts + 1) << xmax, ymin;
-  V.row(totpts + 2) << xmax, ymax;
-  V.row(totpts + 3) << xmin, ymax;
+  double xgap = (s.maxX - s.minX) * GLOBAL::padding_perc,
+         ygap = (s.maxY - s.minY) * GLOBAL::padding_perc;
+  V.row(totpts + 0) << s.minX - xgap, s.minY - ygap;
+  V.row(totpts + 1) << s.maxX + xgap, s.minY - ygap;
+  V.row(totpts + 2) << s.maxX + xgap, s.maxY + ygap;
+  V.row(totpts + 3) << s.minX - xgap, s.maxY + ygap;
 
   // Attach new edges, label new edges and vertices.
   for (int i = 0; i < 4; ++i) {
@@ -147,39 +147,21 @@ void Tile::triangulateSlice(const Slice &s,
     EM(totpts + i) = GLOBAL::nonoriginal_marker;
   }
 
-  cout << "Rendering triangle here...\n";
-	/*
-	igl::viewer::Viewer viewer;
-	vector<string> labels;
-	//Eigen::MatrixXd C;
-	//igl::jet(VM, true, C);
-	viewer.data.set_mesh(V, E);
-  //viewer.data.set_face_based(false);
-	//viewer.data.set_colors(C);
-	for (int i = 0; i < VM.rows(); ++i) {
-
-		if (VM(i) == 0) {
-			viewer.data.add_label(V.row(i), "o");
-		} else {
-			viewer.data.add_label(V.row(i), "x");
-		}
-	}
-  viewer.launch();
-	*/
-
 	cout << "Delaunay triangulating mesh with " << V.rows() << " verts" << endl;
 
 	stringstream ss;
 	ss << "Da" << areaBound << "q";
+
 	MatrixXd V2;
 	igl::triangle::triangulate(V, E, H, VM, EM, ss.str().c_str(), V2, faces, orig);
-	cout << "done" << endl;
+
 	verts.resize(V2.rows(), 3);
 	flood_fill(faces, orig);
 
+  // 3D-fying the tile.
 	for(int i=0; i<verts.rows(); i++) {
-		verts(i, 0) = V2(i,0);
-		verts(i, 1) = V2(i,1);
+		verts(i, 0) = V2(i, 0);
+		verts(i, 1) = V2(i, 1);
 		verts(i, 2) = z;
 	}
 }
@@ -191,42 +173,16 @@ void Tile::triangulateSlices(double areaBound,
 #ifdef ZSCALE_HACK
   double thickness = 0.25;
   // thickness = (botverts.colwise().maxCoeff() - botverts.colwise().minCoeff()).maxCoeff();
-
   printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
          __FILE__, __LINE__, thickness, bottom_.thickness);
 #else
   double thickness = bottom_.thickness;
 #endif
 
-  double xmin = bbox_(0, 0), xmax = bbox_(0, 1),
-         ymin = bbox_(1, 0), ymax = bbox_(1, 1),
-         zmin = bbox_(2, 0), zmax = zmin + thickness;
-
-  cout << "Bounding box:" << endl;
-  cout << "x: " << xmin << " " << xmax << endl;
-  cout << "y: " << ymin << " " << ymax << endl;
-  cout << "z: " << zmin << " " << zmax << endl;
-
-  double xgap = (xmax - xmin) * GLOBAL::padding_perc,
-         ygap = (ymax - ymin) * GLOBAL::padding_perc;
-
-
-  double xMinPadded = xmin - xgap,
-         xMaxPadded = xmax + xgap,
-         yMinPadded = ymin - ygap,
-         yMaxPadded = ymax + ygap;
-
   // If the bottom vertices is not empty, just use what you have.
   if (botV.rows() == 0) {
-    triangulateSlice(bottom_,
-                     xMinPadded, xMaxPadded,
-                     yMinPadded, yMaxPadded, 0.0,
-                     areaBound, botV, botF, botO);
+    triangulateSlice(bottom_, 0.0, areaBound, botV, botF, botO);
   }
 
-  double prev_z = botV(0, 2);
-  triangulateSlice(top_,
-                   xMinPadded, xMaxPadded,
-                   yMinPadded, yMaxPadded, prev_z + thickness,
-                   areaBound, topV, topF, topO);
+  triangulateSlice(top_, botV(0, 2) + thickness, areaBound, topV, topF, topO);
 }

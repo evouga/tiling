@@ -30,6 +30,12 @@ namespace GLOBAL {
   // Number of extra points to add to sides of the unit cube.
   // TODO: relate this to thickness.
   const int EXTRA = 20;
+
+  // Labels for triangulating a rhombus
+  const int LEFT = 0;
+  const int RIGHT = 1;
+  const int FRONT = 2;
+  const int BACK = 3;
 }
 
 #endif
