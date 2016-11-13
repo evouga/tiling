@@ -412,7 +412,7 @@ int main(int argc, char *argv[]) {
   getOffsetSurface(good_start, ss,
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
-                   bV, bF, borig, true);
+                   bV, bF, borig, false);
   good_start++;
   // Next time's bottom will be last time's top.
   botverts = topverts;
@@ -423,7 +423,7 @@ int main(int argc, char *argv[]) {
   getOffsetSurface(good_start, ss,
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
-                   tV, tF, torig, true);
+                   tV, tF, torig, false);
 
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
@@ -451,32 +451,30 @@ int main(int argc, char *argv[]) {
   viewer.data.set_mesh(V, F);
   viewer.launch();
 
-  // Let's write it off right now.
-  igl::writeOFF("both_slices_pre.off", V, F);
-  FILE* ofpre = fopen("both_slices_pre_orig.txt", "w");
-  for (int i = 0; i < orig.rows(); ++i) {
-    fprintf(ofpre, "%d\n", orig(i));
-  }
-  fclose(ofpre);
-
   Eigen::MatrixXd Vborder;
   Eigen::MatrixXi Fborder;
   Eigen::VectorXi Oborder;
+  fprintf(stderr, "Extracting shell...\n");
   extractShell(V, F, orig, Vborder, Fborder, Oborder);
+  /*
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
   viewer.launch();
-  fprintf(stderr,"extracted shell\n");
+  */
+  fprintf(stderr,"extracted shell\nRemoving duplicates...\n");
   removeDuplicates(Vborder, Fborder, Oborder);
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
   viewer.launch();
-  fprintf(stderr, "removed duplicates\n");
+  /*
+   * This isn't working... But it's also not (really) necessary.
+  fprintf(stderr, "removed duplicates\nimproving mesh...");
   improveMesh(Vborder, Fborder, Oborder, 0.01);
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
   viewer.launch();
   fprintf(stderr, "improved mesh\n");
+  */
   igl::writeOFF("both_slices.off", Vborder, Fborder);
   // Also write the original vertices
   FILE* of = fopen("both_slices_orig.txt", "w");
@@ -493,26 +491,4 @@ int main(int argc, char *argv[]) {
   //viewer.launch();
   //biharmonic(V, F, orig, 0.1, Vcurve);
   biharmonic(Vborder, Fborder, Oborder, 0.1, Vcurve);
-
-	/*
-  Eigen::MatrixXd V(botverts.rows() + topverts.rows(), 3);
-  for(int i=0; i<botverts.rows(); i++)
-    V.row(i) = botverts.row(i);
-  for(int i=0; i<topverts.rows(); i++)
-    V.row(botverts.rows() + i) = topverts.row(i);
-  Eigen::MatrixXi F(botfaces.rows() + topfaces.rows(), 3);
-  for(int i=0; i<botfaces.rows(); i++)
-    F.row(i) = botfaces.row(i);
-  for(int i=0; i<topfaces.rows(); i++)
-  {
-    for(int j=0; j<3; j++)
-      F(botfaces.rows() + i, j) = topfaces(i,j) + botverts.rows();
-  }
-
-  // Plot the mesh
-  igl::viewer::Viewer viewer;
-  viewer.data.set_mesh(V, F);
-  viewer.data.set_face_based(true);
-  viewer.launch();
-	*/
 }

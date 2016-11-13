@@ -11,6 +11,7 @@
 #include <igl/setdiff.h>
 #include <igl/slice.h>
 #include <igl/unique.h>
+#include <igl/remove_duplicates.h>
 #include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
 #include <igl/writeOFF.h>
@@ -336,6 +337,7 @@ void SliceStack::tetrahedralizeSlice (
                    frontTriF.rows();
 
   Eigen::MatrixXd V_rep(totalVertices, 3);
+  Eigen::MatrixXi F_rep(totalFaces, 3);
 	Eigen::VectorXi M_rep(totalVertices);
 
   int offset = 0;
@@ -375,43 +377,39 @@ void SliceStack::tetrahedralizeSlice (
     V_rep.row(offset++) = backTriV.row(i);
   }
 
-	// Get all the unique vertices
+	// Add the faces
+  offset = 0;
+  Eigen::Vector3i vertexOffset(0, 0, 0);
+
+  relabelFaces(F_rep, botV, botF, vertexOffset, offset);
+  relabelFaces(F_rep, topV, topF, vertexOffset, offset);
+  relabelFaces(F_rep, leftTriV, leftTriF, vertexOffset, offset);
+  relabelFaces(F_rep, rightTriV, rightTriF, vertexOffset, offset);
+  relabelFaces(F_rep, frontTriV, frontTriF, vertexOffset, offset);
+  relabelFaces(F_rep, backTriV, backTriF, vertexOffset, offset);
+
+	// Get all the unique vertices and faces
 	Eigen::MatrixXd V;
+  Eigen::MatrixXi F;
 	// contains mapping from unique to all indices
 	// Size: #V
 	Eigen::VectorXi unique_to_all;
 	// contains mapping from all indices to unique
 	// Size: #V_rep
 	Eigen::VectorXi all_to_unique;
-	igl::unique_rows(V_rep, V, unique_to_all, all_to_unique);
-	//printf("Size of unique is now: %ld vs %ld\n", V_rep.rows(), V.rows());
-	//printf("Sizes are %ld,%ld\n", unique_to_all.rows(), all_to_unique.rows());
 
-	// Get unique markers for M
-	Eigen::VectorXi M(V.rows());
-	for (int i = 0; i < M.rows(); ++i) {
-		//printf("Changing index %d to %d\n", i, unique_to_all(i));
-		M(i) = M_rep(unique_to_all(i));
-	}
+  igl::remove_duplicates(V_rep, F_rep, V, F, all_to_unique, GLOBAL::EPS);
+  printf("After removing dups, sizes are dups:%lu uniq:%lu other?:%lu\n",
+         V_rep.rows(), V.rows(), all_to_unique.rows());
 
-	// Add the faces
-  Eigen::MatrixXi F(totalFaces, 3);
-  offset = 0;
-  Eigen::Vector3i vertexOffset(0, 0, 0);
-
-  relabelFaces(F, botV, botF, vertexOffset, offset);
-  relabelFaces(F, topV, topF, vertexOffset, offset);
-  relabelFaces(F, leftTriV, leftTriF, vertexOffset, offset);
-  relabelFaces(F, rightTriV, rightTriF, vertexOffset, offset);
-  relabelFaces(F, frontTriV, frontTriF, vertexOffset, offset);
-  relabelFaces(F, backTriV, backTriF, vertexOffset, offset);
-
-	// Make sure the faces point to the correct (unique) points
-	for (int i = 0; i < F.rows(); ++i) {
-		for (int j = 0; j < F.row(i).cols(); ++j) {
-			F(i, j) = all_to_unique(F(i, j));
-		}
-	}
+  // Get unique markers for M
+  Eigen::VectorXi M(V.rows());
+  M.setZero();  // Make sure it's zero to start.
+  for (int i = 0; i < M_rep.rows(); ++i) {
+    int new_i = all_to_unique(i);
+    // If it has been set before, set it to the largest one (original > nonoriginal)
+    M(new_i) = max(M(new_i), M_rep(i));
+  }
 
   //igl::writeOFF("foo.off", V, F);
 
@@ -427,10 +425,12 @@ void SliceStack::tetrahedralizeSlice (
 	}
 
   // Tetrahedralized interior
+  /*
   igl::viewer::Viewer v;
   v.data.clear();
   v.data.set_mesh(V, F);
   v.launch();
+  */
 
 	// TV will have the tetrahedralized vertices;
 	// TT will have the "" tet indices (#V x 4)
