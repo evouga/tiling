@@ -199,16 +199,22 @@ int nComponents(const Eigen::VectorXi &comps) {
   return u.size();
 }
 
-void combineMeshes(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
-                   const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF,
-                   Eigen::MatrixXd &V, Eigen::MatrixXi &F, bool shift = true) {
+void combineMeshes(
+    const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF, 
+    const Eigen::VectorXi &bO,
+    const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF,
+    const Eigen::VectorXi &tO,
+    Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
+    bool shift = true) {
 
-  auto max_bot = bV.colwise().maxCoeff();
-  auto min_top = tV.colwise().minCoeff();
-  double shift_z = max_bot(2) - min_top(2);
-  // Shift the top vertices.
   Eigen::MatrixXd temptV = tV;
   if (shift) {
+    // Put the two of them together (so that the bax of the bottom and the min
+    // of the top are the same
+    auto max_bot = bV.colwise().maxCoeff();
+    auto min_top = tV.colwise().minCoeff();
+    double shift_z = max_bot(2) - min_top(2);
+    // Shift the top vertices.
     for (int i = 0; i < temptV.rows(); ++i) {
       temptV(i, 2) += shift_z;
     }
@@ -221,12 +227,14 @@ void combineMeshes(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
                                     V,F, J);
 }
 
-void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
-                   const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF,
-                   Eigen::MatrixXd &V, Eigen::MatrixXi &F, bool shift = true) {
+void combineMeshes_2(
+    const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF, const Eigen::VectorXi &bO,
+    const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF, const Eigen::VectorXi &tO,
+    Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O, bool shift = true) {
   // Combine the two of them.
   V.resize(bV.rows() + tV.rows(), 3);
   F.resize(bF.rows() + tF.rows(), 3);
+  O.resize(bO.rows() + tO.rows());
   auto max_bot = bV.colwise().maxCoeff();
   auto min_top = tV.colwise().minCoeff();
   double shift_z = max_bot(2) - min_top(2);
@@ -234,9 +242,12 @@ void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
 
   V << bV, tV;
   F << bF, tF;
-  // Change the top vertices so they have the appropriate z-values.
-  for (int i = bV.rows(); i < V.rows(); ++i) {
-    if (shift) V(i, 2) += shift_z;
+  O << bO, tO;
+  if (shift) {
+    // Change the top vertices so they have the appropriate z-values.
+    for (int i = bV.rows(); i < V.rows(); ++i) {
+      V(i, 2) += shift_z;
+    }
   }
   // Change the face indices so they have the correct vertex idx.
   for (int i = bF.rows(); i < F.rows(); ++i) {
@@ -250,6 +261,18 @@ void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
   Eigen::MatrixXi Fu;
   Eigen::VectorXi I;
   igl::remove_duplicates(V,F, Vu,Fu, I);
+
+  Eigen::VectorXi Ou;
+  Ou.resize(Vu.rows());
+  Ou.setZero();
+  for (int i = 0; i < O.rows(); ++i) {
+    int new_i = I(i);
+    Ou(new_i) = max(Ou(new_i), O(i));
+  }
+
+  V = Vu;
+  F = Fu;
+  O = Ou;
 
   /*
   // Make sure the vertices are all unique
@@ -279,14 +302,12 @@ void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
 }
 
 // Can pass in topverts, topfaces, and toporig if you want to use them.
-void getOffsetSurface(int bot_slice_no, SliceStack &ss,
-                      Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces,
-                      Eigen::VectorXi &botorig,
-                      Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
-                      Eigen::VectorXi &toporig,
-                      Eigen::MatrixXd &offsetV, Eigen::MatrixXi &offsetF,
-                      Eigen::VectorXi &orig,
-                      bool view=false) {
+void getOffsetSurface(
+    int bot_slice_no, SliceStack &ss,
+    Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, Eigen::VectorXi &botorig,
+    Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces, Eigen::VectorXi &toporig,
+    Eigen::MatrixXd &offsetV, Eigen::MatrixXi &offsetF, Eigen::VectorXi &orig,
+    bool view=false) {
   igl::viewer::Viewer v;
 
   ss.triangulateSlice(bot_slice_no, 0.005,
@@ -300,9 +321,9 @@ void getOffsetSurface(int bot_slice_no, SliceStack &ss,
     v.data.set_face_based(true);
     v.data.set_colors(C);
     for (int i = 0; i < botorig.rows(); ++i) {
-      if (botorig(i) == 0) {
+      if (botorig(i) == GLOBAL::nonoriginal_marker) {
         v.data.add_label(botverts.row(i), "o");
-      } else if (botorig(i) == 1) {
+      } else if (botorig(i) == GLOBAL::original_marker) {
         v.data.add_label(botverts.row(i), "x");
       } else {
         v.data.add_label(botverts.row(i), to_string(botorig(i)));
@@ -310,8 +331,10 @@ void getOffsetSurface(int bot_slice_no, SliceStack &ss,
     }
     Eigen::MatrixXd allverts;
     Eigen::MatrixXi allfaces;
-    combineMeshes_2(botverts, botfaces, topverts, topfaces,
-                  allverts, allfaces, false);
+    Eigen::VectorXi allorig;
+    combineMeshes_2(botverts, botfaces, botorig,
+                    topverts, topfaces, toporig,
+                    allverts, allfaces, allorig, false);
     v.data.clear();
     v.data.set_mesh(allverts, allfaces);
     v.data.set_face_based(true);
@@ -401,6 +424,9 @@ int main(int argc, char *argv[]) {
     printf("ERROR: Couldn't find valid slices!\n");
     return -1;
   }
+  Eigen::MatrixXd V;
+  Eigen::MatrixXi F;
+  Eigen::VectorXi orig;
   Eigen::MatrixXd bV, tV;
   Eigen::MatrixXi bF, tF;
   Eigen::VectorXi borig, torig;
@@ -408,47 +434,37 @@ int main(int argc, char *argv[]) {
   Eigen::MatrixXd topverts, botverts;
   Eigen::MatrixXi topfaces, botfaces;
   Eigen::VectorXi toporig, botorig;
-
   getOffsetSurface(good_start, ss,
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
                    bV, bF, borig, false);
-  good_start++;
-  // Next time's bottom will be last time's top.
-  botverts = topverts;
-  botfaces = topfaces;
-  botorig = toporig;
 
-  // Get the next cube, using stuff from last time.
-  getOffsetSurface(good_start, ss,
-                   botverts, botfaces, botorig,
-                   topverts, topfaces, toporig,
-                   tV, tF, torig, false);
+  for (int i = 1; i < 10; ++i) {
+    // Next time's bottom will be last time's top.
+    botverts = topverts;
+    botfaces = topfaces;
+    botorig = toporig;
 
-  Eigen::MatrixXd V;
-  Eigen::MatrixXi F;
-  combineMeshes(bV, bF, tV, tF, V, F);
-  Eigen::VectorXi orig(V.rows());
-  auto mins = bV.colwise().minCoeff();
-  auto mids = bV.colwise().maxCoeff();
-  auto maxs = V.colwise().maxCoeff();
+    // Get the next cube, using stuff from last time.
+    getOffsetSurface(good_start + i, ss,
+                     botverts, botfaces, botorig,
+                     topverts, topfaces, toporig,
+                     tV, tF, torig, false /* display */);
 
-  int n_orig = 0;
-  for (int i = 0; i < V.rows(); ++i) {
-    if (V(i, 2) == mins(2) ||
-        V(i, 2) == mids(2) ||
-        V(i, 2) == maxs(2)) {
-      orig(i) = GLOBAL::original_marker;
-      ++n_orig;
-    } else {
-      orig(i) = GLOBAL::nonoriginal_marker;
-    }
+
+    combineMeshes_2(bV, bF, borig, tV, tF, torig, V, F, orig, false);
+    bV = V;
+    bF = F;
+    borig = orig;
   }
-  printf("Number orig: %d/%ld\n", n_orig, V.rows());
 
   // Display them
   igl::viewer::Viewer viewer;
+  Eigen::MatrixXd origCols;
+  igl::jet(orig, true, origCols);
+  viewer.data.clear();
   viewer.data.set_mesh(V, F);
+  viewer.data.set_colors(origCols);
   viewer.launch();
 
   Eigen::MatrixXd Vborder;
@@ -460,14 +476,13 @@ int main(int argc, char *argv[]) {
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
   viewer.launch();
-  */
   fprintf(stderr,"extracted shell\nRemoving duplicates...\n");
   removeDuplicates(Vborder, Fborder, Oborder);
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
   viewer.launch();
-  /*
-   * This isn't working... But it's also not (really) necessary.
+
+  // This isn't working... But it's also not (really) necessary.
   fprintf(stderr, "removed duplicates\nimproving mesh...");
   improveMesh(Vborder, Fborder, Oborder, 0.01);
   viewer.data.clear();
