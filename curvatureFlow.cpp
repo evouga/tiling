@@ -4,6 +4,7 @@
 #include <igl/boundary_facets.h>
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
+#include <igl/harmonic.h>
 #include <igl/massmatrix.h>
 #include <igl/setdiff.h>
 #include <igl/slice.h>
@@ -122,7 +123,7 @@ void outerIndices(const Eigen::VectorXi &orig,
   }
 }
 
-void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+void biharmonic_self(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                 const Eigen::VectorXi &orig,
                 double timestep,
                 Eigen::MatrixXd &Vg) {
@@ -225,6 +226,69 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     return true;
   };
 
+  v.data.set_mesh(Vc, F);
+  v.launch();
+
+}
+
+void convertVectorToIndices(const Eigen::VectorXi &orig,
+                            Eigen::VectorXi &b) {
+  // b will contain all the boundary vertices.
+  int num_orig = 0;
+  for (int i = 0; i < orig.rows(); ++i) {
+    if (orig(i) == GLOBAL::original_marker) {
+      num_orig++;
+    }
+  }
+  b.resize(num_orig);
+  int orig_i = 0;
+  for (int i = 0; i < orig.rows(); ++i) {
+    if (orig(i) == GLOBAL::original_marker) {
+      b(orig_i++) = i;
+    }
+  }
+}
+
+void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                const Eigen::VectorXi &orig,
+                Eigen::MatrixXd &Vc) {
+  Eigen::VectorXi b;
+  // Get the correct indices.
+  convertVectorToIndices(orig, b);
+  // The positions of these indices are held constant (just keep the input values)
+  Eigen::MatrixXd V_bc = igl::slice(V, b, 1);
+
+  // Initialize Vc with input vertices V
+  Vc = V;
+
+  igl::viewer::Viewer v;
+  v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
+    // Press spacebar to get the next version.
+    if (key == ' ') {
+      // How much should we change by?
+      Eigen::MatrixXd D;
+      Eigen::MatrixXd V_bc = igl::slice(Vc, b, 1);
+      igl::harmonic(Vc,F, b,V_bc, 2, D);
+
+      // Calculate the difference.
+      double diff = 0;
+      // Vertices updated like:
+      for (int i = 0; i < V.rows(); ++i) {
+        diff += (Vc.row(i) - D.row(i)).norm();
+      }
+      printf("Difference this round is %f\n", diff);
+      
+      //Vc = Vc + D;
+      Vc = D;
+
+      v.data.set_vertices(Vc);
+    }
+    return true;
+  };
+
+  printf("\nViewing biharmonic mesh.\n");
+  printf("  Press ' ' (space) to deform shape progressively\n");
+  printf("  Close down image to return shape to previous function\n");
   v.data.set_mesh(Vc, F);
   v.launch();
 

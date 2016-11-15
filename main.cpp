@@ -439,7 +439,8 @@ int main(int argc, char *argv[]) {
                    topverts, topfaces, toporig,
                    bV, bF, borig, false);
 
-  for (int i = 1; i < 10; ++i) {
+  int numRows = 10;
+  for (int i = 1; i < numRows; ++i) {
     // Next time's bottom will be last time's top.
     botverts = topverts;
     botfaces = topfaces;
@@ -505,5 +506,5 @@ int main(int argc, char *argv[]) {
   //viewer.data.set_mesh(Vcurve, F);
   //viewer.launch();
   //biharmonic(V, F, orig, 0.1, Vcurve);
-  biharmonic(Vborder, Fborder, Oborder, 0.1, Vcurve);
+  biharmonic(Vborder, Fborder, Oborder, Vcurve);
 }
