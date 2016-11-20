@@ -4,6 +4,7 @@
 #include <igl/boundary_facets.h>
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
+#include <igl/jet.h>
 #include <igl/harmonic.h>
 #include <igl/massmatrix.h>
 #include <igl/setdiff.h>
@@ -258,6 +259,10 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // The positions of these indices are held constant (just keep the input values)
   Eigen::MatrixXd V_bc = igl::slice(V, b, 1);
 
+  Eigen::SparseMatrix<double> L, M;
+  igl::cotmatrix(V,F,L);
+  igl::massmatrix(V,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
+
   // Initialize Vc with input vertices V
   Vc = V;
 
@@ -265,10 +270,14 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
     // Press spacebar to get the next version.
     if (key == ' ') {
+      // Recompute M, leave L alone.
+      igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
+      //igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_BARYCENTRIC,M);
+
       // How much should we change by?
       Eigen::MatrixXd D;
-      Eigen::MatrixXd V_bc = igl::slice(Vc, b, 1);
-      igl::harmonic(Vc,F, b,V_bc, 2, D);
+      //Eigen::MatrixXd V_bc = igl::slice(Vc, b, 1);
+      igl::harmonic(L,M, b,V_bc, 2, D);
 
       // Calculate the difference.
       double diff = 0;
@@ -281,7 +290,10 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       //Vc = Vc + D;
       Vc = D;
 
+      Eigen::MatrixXd cols;
+      igl::jet(orig, true, cols);
       v.data.set_vertices(Vc);
+      v.data.set_colors(cols);
     }
     return true;
   };
