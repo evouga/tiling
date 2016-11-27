@@ -19,33 +19,22 @@
 #include "offsetSurface.h"
 #include "SliceStack.h"
 #include "viewTetMesh.h"
+#include "Helpers.h"
 
 using namespace std;
 
 // Input/output is the same!!
-void removeDuplicates(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &orig) {
-  Eigen::MatrixXd Vo;
-  Eigen::MatrixXi Fo;
-  Eigen::VectorXi I, origo;
-  igl::remove_duplicates(V, F, Vo, Fo, I, 1e-6);
-  origo.resize(Vo.rows());
-  for (int i = 0; i < orig.rows(); ++i) {
-    origo(I(i)) = orig(i);
-  }
-  V = Vo;
-  F = Fo;
-  orig = origo;
-}
-
-// Input/output is the same!!
-void improveMesh(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &orig, float triangle_area) {
+void improveMesh(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
+                 Eigen::VectorXi &orig, float triangle_area=0.01) {
   Eigen::MatrixXi Fo;
   igl::collapse_small_triangles(V, F, triangle_area, Fo);
   F = Fo;
 }
 
-void extractShell(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXi &orig,
-                  Eigen::MatrixXd &triV, Eigen::MatrixXi &triF, Eigen::VectorXi &triOrig) {
+void extractShell(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                  const Eigen::VectorXi &orig,
+                  Eigen::MatrixXd &triV, Eigen::MatrixXi &triF,
+                  Eigen::VectorXi &triOrig) {
   Eigen::MatrixXd Vo;
   Eigen::MatrixXi Fo;
   Eigen::VectorXi origo;
@@ -98,7 +87,6 @@ void extractShell(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eige
 
   fprintf(stderr,"Verts now %d (vs %d), F:%d (vs %d), o:%d\n",
          triV.rows(),Vo.rows(), triF.rows(), Fo.rows(), triOrig.rows());
-
   /*
   // Remove the bottom
   double zmin = Vo(0,2);
@@ -199,11 +187,10 @@ int nComponents(const Eigen::VectorXi &comps) {
   return u.size();
 }
 
-void combineMeshes(
-    const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF, 
-    const Eigen::VectorXi &bO,
-    const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF,
-    const Eigen::VectorXi &tO,
+void combineMeshes(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
+                   const Eigen::VectorXi &bO,
+                   const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF,
+                   const Eigen::VectorXi &tO,
     Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
     bool shift = true) {
 
@@ -222,57 +209,33 @@ void combineMeshes(
 
   // Then use CGAL's MESH_BOOLEAN function.
   Eigen::VectorXi J;
-  igl::copyleft::cgal::mesh_boolean(bV,bF, temptV,tF, 
+  igl::copyleft::cgal::mesh_boolean(bV,bF, temptV,tF,
                                     igl::MeshBooleanType::MESH_BOOLEAN_TYPE_UNION,
                                     V,F, J);
 }
 
-void combineMeshes_2(
-    const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF, const Eigen::VectorXi &bO,
-    const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF, const Eigen::VectorXi &tO,
-    Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O, bool shift = true) {
+void combineMeshes_2(const Eigen::MatrixXd &bV, const Eigen::MatrixXi &bF,
+                     const Eigen::VectorXi &bO,
+                     const Eigen::MatrixXd &tV, const Eigen::MatrixXi &tF,
+                     const Eigen::VectorXi &tO,
+                     Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O) {
   // Combine the two of them.
   V.resize(bV.rows() + tV.rows(), 3);
   F.resize(bF.rows() + tF.rows(), 3);
   O.resize(bO.rows() + tO.rows());
-  auto max_bot = bV.colwise().maxCoeff();
-  auto min_top = tV.colwise().minCoeff();
-  double shift_z = max_bot(2) - min_top(2);
-  printf("Shift is %lf (%lf-%lf)\n", shift_z, max_bot(2), min_top(2));
 
   V << bV, tV;
   F << bF, tF;
   O << bO, tO;
-  if (shift) {
-    // Change the top vertices so they have the appropriate z-values.
-    for (int i = bV.rows(); i < V.rows(); ++i) {
-      V(i, 2) += shift_z;
-    }
-  }
+
   // Change the face indices so they have the correct vertex idx.
   for (int i = bF.rows(); i < F.rows(); ++i) {
     for (int j = 0; j < 3; ++j) {
-      // Increment it to point to the correct location.
       F(i, j) += bV.rows();
     }
   }
 
-	Eigen::MatrixXd Vu;
-  Eigen::MatrixXi Fu;
-  Eigen::VectorXi I;
-  igl::remove_duplicates(V,F, Vu,Fu, I);
-
-  Eigen::VectorXi Ou;
-  Ou.resize(Vu.rows());
-  Ou.setZero();
-  for (int i = 0; i < O.rows(); ++i) {
-    int new_i = I(i);
-    Ou(new_i) = max(Ou(new_i), O(i));
-  }
-
-  V = Vu;
-  F = Fu;
-  O = Ou;
+  Helpers::removeDuplicates(V, F, O);
 
   /*
   // Make sure the vertices are all unique
@@ -334,7 +297,7 @@ void getOffsetSurface(
     Eigen::VectorXi allorig;
     combineMeshes_2(botverts, botfaces, botorig,
                     topverts, topfaces, toporig,
-                    allverts, allfaces, allorig, false);
+                    allverts, allfaces, allorig);
     v.data.clear();
     v.data.set_mesh(allverts, allfaces);
     v.data.set_face_based(true);
@@ -345,8 +308,7 @@ void getOffsetSurface(
   Eigen::MatrixXi TT, TF;
 	Eigen::VectorXi TO;
   ss.tetrahedralizeSlice(botverts, botfaces, topverts, topfaces,
-												 botorig, toporig,
-												 TV, TT, TF, TO);
+												 botorig, toporig, TV, TT, TF, TO);
 
   cout << "Triangulated tile contains ";
   cout << botverts.rows() << " verts on bottom face and ";
@@ -373,8 +335,7 @@ void getOffsetSurface(
   igl::components(offsetF, comp);
   int nc = nComponents(comp);
   while (nc > 1) {
-    printf("With an offset of %lf, number of components is %d\n",
-           offset, nc);
+    printf("With an offset of %lf, number of components is %d\n", offset, nc);
     offset = (offset + 1.0) / 2.0;
     //generateOffsetSurface(T, offset, offsetV, offsetF);
     OffsetSurface::generateOffsetSurface_naive(
@@ -394,8 +355,7 @@ void getOffsetSurface(
   orig.resize(offsetV.rows());
   // It's original if it's on the boundary.
   for (int i = 0; i < offsetV.rows(); ++i) {
-    if (offsetV(i,2) == maxs(2) ||
-        offsetV(i,2) == mins(2)) {
+    if (offsetV(i,2) == maxs(2) || offsetV(i,2) == mins(2)) {
       orig(i) = GLOBAL::original_marker;
     } else {
       orig(i) = GLOBAL::nonoriginal_marker;
@@ -405,7 +365,8 @@ void getOffsetSurface(
 
 int main(int argc, char *argv[]) {
   if(argc != 3) {
-    cerr << "Must specify the base filename and object name" << endl;
+    cerr << "Usage:" << endl;
+    cerr << "./example_bin /directory/containing/traces.ver tracename" << endl;
     return -1;
   }
 
@@ -424,6 +385,7 @@ int main(int argc, char *argv[]) {
     printf("ERROR: Couldn't find valid slices!\n");
     return -1;
   }
+
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   Eigen::VectorXi orig;
@@ -453,7 +415,7 @@ int main(int argc, char *argv[]) {
                      tV, tF, torig, false /* display */);
 
 
-    combineMeshes_2(bV, bF, borig, tV, tF, torig, V, F, orig, false);
+    combineMeshes_2(bV, bF, borig, tV, tF, torig, V, F, orig);
     bV = V;
     bF = F;
     borig = orig;
@@ -485,7 +447,7 @@ int main(int argc, char *argv[]) {
 
   // This isn't working... But it's also not (really) necessary.
   fprintf(stderr, "removed duplicates\nimproving mesh...");
-  improveMesh(Vborder, Fborder, Oborder, 0.01);
+  improveMesh(Vborder, Fborder, Oborder);
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
   viewer.launch();

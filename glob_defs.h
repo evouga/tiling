@@ -1,8 +1,11 @@
 #ifndef GLOB_DEFS_H
 
-// Avoid the use of magic numbers and multiple defines. Put all the globally-
-// used numbers in here.
+// Avoid the use of magic numbers and multiple defines.
+// Put all the globally-used numbers in here.
 namespace GLOBAL {
+  // Print/viewer debug mode.
+  const bool DEBUG = true;
+
   const float padding_perc = 0.05;
 
   // Values defined on the min- and max-z-axis extremes. Inside temp is the
@@ -25,17 +28,23 @@ namespace GLOBAL {
   const int nonoriginal_marker = 1;
 
   // Used to compare doubles.
-  const double EPS = 1e-5;
+  const double EPS = 1e-6;
 
   // Number of extra points to add to sides of the unit cube.
   // TODO: relate this to thickness.
   const int EXTRA = 20;
 
-  // Labels for triangulating a rhombus
+  // Labels for triangulating a rhombus.
   const int LEFT = 0;
   const int RIGHT = 1;
   const int FRONT = 2;
   const int BACK = 3;
+
+  // Ratio between radius and area, used for Tetgen.
+  const float TET_RATIO = 1.1;
+
+  // Maximum area of a triangle, used for Triangle.
+  const float TRI_AREA = 0.01;
 }
 
 #endif

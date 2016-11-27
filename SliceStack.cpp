@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include <igl/colon.h>
-#include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/cotmatrix.h>
 #include <igl/jet.h>
 #include <igl/min_quad_with_fixed.h>
@@ -12,7 +11,6 @@
 #include <igl/slice.h>
 #include <igl/unique.h>
 #include <igl/remove_duplicates.h>
-#include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
 #include <igl/writeOFF.h>
 
@@ -23,6 +21,7 @@
 #include "Slice.h"
 #include "Tile.h"
 #include "viewTetMesh.h"
+#include "Helpers.h"
 
 using namespace std;
 
@@ -137,7 +136,6 @@ void SliceStack::triangulateSide(int constantCoord,
 
   Eigen::MatrixXd inputV(verts.size() + GLOBAL::EXTRA * 2, 2);
   Eigen::MatrixXi inputE(verts.size() + GLOBAL::EXTRA * 2, 2);
-  Eigen::MatrixXd H(0, 2);
 
   int offset = 0;
 
@@ -185,16 +183,7 @@ void SliceStack::triangulateSide(int constantCoord,
   }
 
   Eigen::MatrixXd tmpV;
-
-  stringstream params;
-  params << "DYa" << triangle_max_area << "q";
-
-	cout << "Delaunay triangulating mesh with " << inputV.rows() << " verts" << endl;
-  cout << "parameters are " << params.str() << endl;
-
-	igl::triangle::triangulate(inputV, inputE, H, params.str().c_str(), tmpV, F);
-
-	cout << "done" << endl;
+  Helpers::triangulate(inputV, inputE, tmpV, F);
 
   // 3D-ifying the slice.
   V.resize(tmpV.rows(), 3);
@@ -267,7 +256,8 @@ void SliceStack::tetrahedralizeSlice (
          ymax = std::max(botMax(1), topMax(1)),
          zmax = std::max(botMax(2), topMax(2));
 
-  printf("bounding box is %f,%f %f,%f %f,%f\n", xmin,xmax, ymin,ymax, zmin,zmax);
+  printf("bounding box is %f,%f %f,%f %f,%f\n",
+         xmin,xmax, ymin,ymax, zmin,zmax);
 
   vector<Eigen::Vector3d> leftV;
   vector<Eigen::Vector3d> rightV;
@@ -336,112 +326,67 @@ void SliceStack::tetrahedralizeSlice (
                    backTriF.rows() +
                    frontTriF.rows();
 
-  Eigen::MatrixXd V_rep(totalVertices, 3);
-  Eigen::MatrixXi F_rep(totalFaces, 3);
-	Eigen::VectorXi M_rep(totalVertices);
+  Eigen::MatrixXd V(totalVertices, 3);
+  Eigen::MatrixXi F(totalFaces, 3);
+	Eigen::VectorXi M(totalVertices);
 
   int offset = 0;
 
   // Add the vertices
   for (int i = 0; i < botV.rows(); ++i) {
-		M_rep(offset) = botorig(i);
-    V_rep.row(offset++) = botV.row(i);
+		M(offset) = botorig(i);
+    V.row(offset++) = botV.row(i);
   }
 
   for (int i = 0; i < topV.rows(); ++i) {
-		M_rep(offset) = toporig(i);
-    V_rep.row(offset++) = topV.row(i);
+		M(offset) = toporig(i);
+    V.row(offset++) = topV.row(i);
   }
 
   for (int i = 0; i < leftTriV.rows(); ++i) {
 		// Not original
-		M_rep(offset) = GLOBAL::nonoriginal_marker;
-    V_rep.row(offset++) = leftTriV.row(i);
+		M(offset) = GLOBAL::nonoriginal_marker;
+    V.row(offset++) = leftTriV.row(i);
   }
 
   for (int i = 0; i < rightTriV.rows(); ++i) {
 		// Not original
-		M_rep(offset) = GLOBAL::nonoriginal_marker;
-    V_rep.row(offset++) = rightTriV.row(i);
+		M(offset) = GLOBAL::nonoriginal_marker;
+    V.row(offset++) = rightTriV.row(i);
   }
 
   for (int i = 0; i < frontTriV.rows(); ++i) {
 		// Not original
-		M_rep(offset) = GLOBAL::nonoriginal_marker;
-    V_rep.row(offset++) = frontTriV.row(i);
+		M(offset) = GLOBAL::nonoriginal_marker;
+    V.row(offset++) = frontTriV.row(i);
   }
 
   for (int i = 0; i < backTriV.rows(); ++i) {
 		// Not original
-		M_rep(offset) = GLOBAL::nonoriginal_marker;
-    V_rep.row(offset++) = backTriV.row(i);
+		M(offset) = GLOBAL::nonoriginal_marker;
+    V.row(offset++) = backTriV.row(i);
   }
 
 	// Add the faces
   offset = 0;
   Eigen::Vector3i vertexOffset(0, 0, 0);
-
-  relabelFaces(F_rep, botV, botF, vertexOffset, offset);
-  relabelFaces(F_rep, topV, topF, vertexOffset, offset);
-  relabelFaces(F_rep, leftTriV, leftTriF, vertexOffset, offset);
-  relabelFaces(F_rep, rightTriV, rightTriF, vertexOffset, offset);
-  relabelFaces(F_rep, frontTriV, frontTriF, vertexOffset, offset);
-  relabelFaces(F_rep, backTriV, backTriF, vertexOffset, offset);
+  relabelFaces(F, botV, botF, vertexOffset, offset);
+  relabelFaces(F, topV, topF, vertexOffset, offset);
+  relabelFaces(F, leftTriV, leftTriF, vertexOffset, offset);
+  relabelFaces(F, rightTriV, rightTriF, vertexOffset, offset);
+  relabelFaces(F, frontTriV, frontTriF, vertexOffset, offset);
+  relabelFaces(F, backTriV, backTriF, vertexOffset, offset);
 
 	// Get all the unique vertices and faces
-	Eigen::MatrixXd V;
-  Eigen::MatrixXi F;
-	// contains mapping from unique to all indices
-	// Size: #V
-	Eigen::VectorXi unique_to_all;
-	// contains mapping from all indices to unique
-	// Size: #V_rep
-	Eigen::VectorXi all_to_unique;
+  Helpers::removeDuplicates(V, F, M);
 
-  igl::remove_duplicates(V_rep, F_rep, V, F, all_to_unique, GLOBAL::EPS);
-  printf("After removing dups, sizes are dups:%lu uniq:%lu other?:%lu\n",
-         V_rep.rows(), V.rows(), all_to_unique.rows());
-
-  // Get unique markers for M
-  Eigen::VectorXi M(V.rows());
-  M.setZero();  // Make sure it's zero to start.
-  for (int i = 0; i < M_rep.rows(); ++i) {
-    int new_i = all_to_unique(i);
-    // If it has been set before, set it to the largest one (original > nonoriginal)
-    M(new_i) = max(M(new_i), M_rep(i));
-  }
-
-  //igl::writeOFF("foo.off", V, F);
-
-	Eigen::VectorXi FM(F.rows());
-	for (int i = 0; i < F.rows(); ++i) {
-		if (M(F(i,0)) == GLOBAL::original_marker &&
-        M(F(i,1)) == GLOBAL::original_marker &&
-        M(F(i,2)) == GLOBAL::original_marker) {
-			FM(i) = GLOBAL::original_marker;
-		} else {
-			FM(i) = GLOBAL::nonoriginal_marker;
-		}
-	}
-
-  // Tetrahedralized interior
-  /*
-  igl::viewer::Viewer v;
-  v.data.clear();
-  v.data.set_mesh(V, F);
-  v.launch();
-  */
+	Eigen::VectorXi FM = Helpers::getFaceMarkers(F, M);
 
 	// TV will have the tetrahedralized vertices;
 	// TT will have the "" tet indices (#V x 4)
 	// TF will have the "" face indices (#V x 3)
 	// TO will have the "" vertex markers
-  stringstream params;
-  params << "pq" << tetgen_max_rad_ratio << "Y";
-  igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, params.str().c_str(), TV,TT,TF,TO);
-  igl::writeOFF("foo_tet.off", TV, TF);
-  printf("Tetrahedralize done\n");
-  printf("Number of faces before:%lu and after:%lu\n", F.rows(), TF.rows());
+  Helpers::tetrahedralize(V, F, M, FM, TV, TT, TF, TO);
 }
 
 void SliceStack::computeLaplace(int slice_no,

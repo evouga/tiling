@@ -6,8 +6,6 @@
 #include <limits>
 #include <vector>
 
-//#include "inpoly.hpp"
-
 struct Contour {
 	std::vector<double> x;
 	std::vector<double> y;
