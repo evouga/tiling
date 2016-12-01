@@ -1,8 +1,11 @@
 #ifndef GLOB_DEFS_H
 
-// Avoid the use of magic numbers and multiple defines. Put all the globally-
-// used numbers in here.
+// Avoid the use of magic numbers and multiple defines.
+// Put all the globally-used numbers in here.
 namespace GLOBAL {
+  // Print/viewer debug mode.
+  const bool DEBUG = true;
+
   const float padding_perc = 0.05;
 
   // Values defined on the min- and max-z-axis extremes. Inside temp is the
@@ -25,13 +28,13 @@ namespace GLOBAL {
   const int nonoriginal_marker = 1;
 
   // Used to compare doubles.
-  const double EPS = 1e-5;
+  const double EPS = 1e-6;
 
   // Number of extra points to add to sides of the unit cube.
   // TODO: relate this to thickness.
   const int EXTRA = 20;
 
-  // Labels for triangulating a rhombus
+  // Labels for triangulating a rhombus.
   const int LEFT = 0;
   const int RIGHT = 1;
   const int FRONT = 2;
@@ -41,12 +44,12 @@ namespace GLOBAL {
   // See -a flag. Lower value creates smaller triangles. With "hack" in place
   // (see Tile.cpp), a value of 0.04 isn't terrible.
   //const float triangle_max_area = 0.04;
-  const float triangle_max_area = 0.005;
+  const float TRI_AREA = 0.005;
   // Variable used by tetgen to determine the maximum allowed *ratio* between
   // the radius and the area. See -q flag. With "hack" in place (see Tile.cpp),
   // a value of 1.4 isn't terrible.
   //const float tetgen_max_rad_ratio = 1.4;
-  const float tetgen_max_rad_ratio = 1.1;
+  const float TET_RATIO = 1.1;
 }
 
 #endif

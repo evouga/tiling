@@ -66,7 +66,6 @@ private:
 	std::vector<Slice*> slices_;
 	std::vector<double> heights_;
   Eigen::MatrixXd bbox_;
-
 };
 
 #endif
