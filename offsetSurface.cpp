@@ -181,8 +181,9 @@ void generateOffsetSurface(const Eigen::MatrixXd &V,
 
 void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  const Eigen::MatrixXi &TT,
+                                 const Eigen::VectorXi &TO,
                                  const Eigen::VectorXd &C, double off,
-                                 Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff) {
+                                 Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff) {
   std::vector<int> s;
   for (int i = 0; i < TT.rows(); ++i) {
     if (C(TT(i, 0)) <= off && C(TT(i, 1)) <= off &&
@@ -193,21 +194,25 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
 
   Voff.resize(s.size() * 4, 3);
   Foff.resize(s.size() * 4, 3);
+  Ooff.resize(s.size() * 4);
   for (unsigned i = 0; i < s.size(); ++i)
   {
-    Voff.row(i*4+0) = V.row(TT(s[i],0));
-    Voff.row(i*4+1) = V.row(TT(s[i],1));
-    Voff.row(i*4+2) = V.row(TT(s[i],2));
-    Voff.row(i*4+3) = V.row(TT(s[i],3));
+    for (int j = 0; j < 4; ++j) {
+      Voff.row(i*4+j) = V.row(TT(s[i],j));
+    }
     Foff.row(i*4+0) << (i*4)+0, (i*4)+1, (i*4)+3;
     Foff.row(i*4+1) << (i*4)+0, (i*4)+2, (i*4)+1;
     Foff.row(i*4+2) << (i*4)+3, (i*4)+2, (i*4)+0;
     Foff.row(i*4+3) << (i*4)+1, (i*4)+2, (i*4)+3;
+    for (int j = 0; j < 4; ++j) {
+      Ooff(i*4+j) = TO(TT(s[i],j));
+    }
   }
 
   // Make sure the vertices are all unique
 	// Get all the unique vertices
 	Eigen::MatrixXd Vu;
+  Eigen::VectorXi Ou;
 	// contains mapping from unique to all indices
 	// Size: #V
 	Eigen::VectorXi unique_to_all;
@@ -217,6 +222,14 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
 	igl::unique_rows(Voff, Vu,unique_to_all,all_to_unique);
   // Remember these.
   Voff = Vu;
+
+  // Update the original markers.
+  Ou.resize(Voff.rows());
+  Ou.setZero();
+  for (int i = 0; i < Ou.rows(); ++i) {
+    Ou(i) = Ooff(unique_to_all(i));
+  }
+  Ooff = Ou;
 
   // Also need to update faces.
   for (int i = 0; i < Foff.rows(); ++i) {

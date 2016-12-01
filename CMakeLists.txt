@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.6)
-project(example)
+project(Tiling)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -70,7 +70,13 @@ include_directories(${LIBIGL_INCLUDE_DIRS})
 add_definitions(${LIBIGL_DEFINITIONS})
 
 ### Add your project files
+SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp")
+message("Removing binary files ${BINARY_FILES}")
 FILE(GLOB SRCFILES *.cpp)
+LIST(REMOVE_ITEM SRCFILES ${BINARY_FILES})
 message("Project sources are: ${SRCFILES}")
-add_executable(${PROJECT_NAME}_bin ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
+add_executable(${PROJECT_NAME}_bin main.cpp ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(${PROJECT_NAME}_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+
+add_executable(test_harmonic_bin test_harmonic.cpp curvatureFlow.cpp ${LIBIGL_EXTRA_SOURCES})
+target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})

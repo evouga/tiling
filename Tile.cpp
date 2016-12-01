@@ -19,58 +19,66 @@ using namespace std;
 const double Tile::tilePadding_ = 0.10;
 
 Tile::Tile(const Slice &bottom, const Slice &top, const Eigen::MatrixXd &bbox)
-  : bottom_(bottom), top_(top), bbox_(bbox)
+  : bottom_(bottom), top_(top), bbox_(bbox) {
+    vector<int> empty;
+  allowed_bot_ = empty;
+  allowed_top_ = empty;
+}
+
+Tile::Tile(const Slice &bottom, const Slice &top, const Eigen::MatrixXd &bbox,
+           const std::vector<int> &allowed_bot, const std::vector<int> &allowed_top)
+: bottom_(bottom), top_(top), bbox_(bbox),
+    allowed_bot_(allowed_bot), allowed_top_(allowed_top)
 { }
 
 Tile::~Tile()
 { }
 
-/*
-// Will resize V and E to fit
-void Tile::getOrig(Eigen::MatrixXd &Vtop, Eigen::MatrixXd &Vbot) {
-	unsigned int total_pts = bottom_.getNumPts() + top_.getNumPts();
-	Vtop.resize(top_.getNumPts(), 3);
-	Vbot.resize(bottom_.getNumPts(), 3);
-	Eigen::MatrixXi E;
-	E.resize(bottom_.getNumPts(), 3);
-	int offset = addOrig(bottom_, Vbot, E, 0);
-	assert(offset == bottom_.getNumPts());
-	fprintf(stderr, "offset is %d and size is %d v is %d\n",
-					offset, bottom_.getNumPts(), Vbot.rows());
-	// Add the z-index
-	for (int i = 0; i < offset; ++i) {
-		Vbot(i, 2) = -GLOBAL::z_lim;
-	}
-
-	E.resize(top_.getNumPts(), 3);
-	offset = addOrig(top_, Vtop, E, 0);
-	for (int i = 0; i < offset; ++i) {
-		Vtop(i, 2) = GLOBAL::z_lim;
-	}
-}
-*/
-
 // Adds original points to V and E. Should be already the correct size
-int Tile::addOrig(const Slice &s,
-									Eigen::MatrixXd &V, Eigen::MatrixXi &E,
-									Eigen::VectorXi &VM, Eigen::VectorXi &EM,
-									Eigen::MatrixXd &lims, int offset) {
+void Tile::addOrig(const Slice &s,
+                   std::vector<RowVector2d> &V,
+                   std::vector<RowVector2i> &E,
+                   std::vector<int> &VM, std::vector<int> &EM,
+                   MatrixXd &lims,
+                   const std::vector<int> &allowed) {
   bool first = true;
   lims.resize(2, 2);
-	int numcontours = s.contours.size();
-	for(int i=0; i<numcontours; i++)
-	{
-		int numpts = s.contours[i].x.size();
-		for(int j=0; j<numpts; j++)
-		{
-			Vector2d pt(s.contours[i].x[j], s.contours[i].y[j]);
-			V(offset+j, 0) = pt(0);
-			V(offset+j, 1) = pt(1);
-			int prev = (j == 0 ? numpts-1 : j-1);
-			E(offset+j, 0) = offset + j;
-			E(offset+j, 1) = offset + prev;
-			VM(offset+j) = GLOBAL::original_marker;
-			EM(offset+j) = GLOBAL::original_marker;
+  int numcontours = s.contours.size();
+  // Iterate over all contours
+  for(int i=0; i<numcontours; i++) {
+    // Check and make sure this is a valid contour.
+    bool is_allowed = false;
+    for (int j = 0; j < allowed.size(); ++j) {
+      if (i == allowed[j]) {
+        is_allowed = true;
+        break;
+      }
+    }
+    // If allowed is empty, all contours are valid.
+    if (!is_allowed && allowed.size() > 0) {
+      continue;
+    }
+
+    // Get the number of points for this contour.
+    int numpts = s.contours[i].x.size();
+
+    // Number of points we've added to this point.
+    int offset = V.size();
+
+    // Find all points in this contour.
+    for(int j=0; j<numpts; j++) {
+      // pt is the point.
+      RowVector2d pt(s.contours[i].x[j], s.contours[i].y[j]);
+      V.push_back(pt);
+
+      // Which point should we connect this to?
+      int prev = (j == 0 ? numpts-1 : j-1);
+      // ed is the edge.
+      RowVector2i ed(offset + j, offset + prev);
+      E.push_back(ed);
+
+      VM.push_back(GLOBAL::original_marker);
+      EM.push_back(GLOBAL::original_marker);
       if (first) {
         lims(0, 0) = lims(0, 1) = pt(0);
         lims(1, 0) = lims(1, 1) = pt(1);
@@ -81,54 +89,62 @@ int Tile::addOrig(const Slice &s,
         lims(1, 0) = min(lims(1, 0), pt(1));
         lims(1, 1) = max(lims(1, 1), pt(1));
       }
-		}
-		offset += numpts;
-	}
-	return offset;
+    }
+  }
 }
 
 void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
-	bool dirty = true;
-	while(dirty) {
-		dirty = false;
-		for (int i = 0; i < faces.rows(); ++i) {
-			if (orig(faces(i,0)) == 1 || orig(faces(i,1)) == 1 || orig(faces(i,2)) == 1) {
-				for (int j = 0; j < 3; ++j) {
-					int vert = faces(i,j);
-					if (orig(vert) == 0) {
-						orig(vert) = 1;
-						dirty = true;
-					}
-				}
-			}
-		}
-	}
+  bool dirty = true;
+  while(dirty) {
+    dirty = false;
+    for (int i = 0; i < faces.rows(); ++i) {
+      if (orig(faces(i,0)) == 1 || orig(faces(i,1)) == 1 || orig(faces(i,2)) == 1) {
+        for (int j = 0; j < 3; ++j) {
+          int vert = faces(i,j);
+          if (orig(vert) == 0) {
+            orig(vert) = 1;
+            dirty = true;
+          }
+        }
+      }
+    }
+  }
 
-	for (int i = 0; i < orig.rows(); ++i) {
-		if (orig(i) == 0) {
-			orig(i) = GLOBAL::original_marker;
-		}
-	}
+  for (int i = 0; i < orig.rows(); ++i) {
+    if (orig(i) == 0) {
+      orig(i) = GLOBAL::original_marker;
+    }
+  }
 }
 
 // Triangulates a single contour.
-void Tile::triangulateSlice(const Slice &s,
-                            double z, double areaBound,
-														Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
-														Eigen::VectorXi &orig) {
-	cout << "num contours: " << s.contours.size() << endl;
+void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
+                            Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
+                            Eigen::VectorXi &orig,
+                            const std::vector<int> &allowed) {
+  cout << "num contours: " << s.contours.size() << endl;
 
-	int totpts = s.getNumPts();
+  std::vector<RowVector2d> V_v;
+  std::vector<RowVector2i> E_v;
+  std::vector<int> VM_v, EM_v;
+  Eigen::MatrixXd lims;
+  addOrig(s, V_v, E_v, VM_v, EM_v, lims, allowed);
 
   // Need alter vertices to include bounds.
+  int totpts = V_v.size();
   Eigen::MatrixXd V(totpts + 4, 2);
   Eigen::MatrixXi E(totpts + 4, 2);
   Eigen::MatrixXd H(0, 2);
   Eigen::VectorXi VM(totpts + 4);
   Eigen::VectorXi EM(totpts + 4);
 
-  Eigen::MatrixXd lims;
-	addOrig(s, V, E, VM, EM, lims, 0);
+  // Copy stuff from vectors. They all have the same size.
+  for (int i = 0; i < totpts; ++i) {
+    V.row(i) = V_v[i];
+    E.row(i) = E_v[i];
+    VM(i) = VM_v[i];
+    EM(i) = EM_v[i];
+  }
 
   // Add the bounding points after adding the original ones.
   double xgap = (s.maxX - s.minX) * GLOBAL::padding_perc,
@@ -147,23 +163,24 @@ void Tile::triangulateSlice(const Slice &s,
     EM(totpts + i) = GLOBAL::nonoriginal_marker;
   }
 
-	cout << "Delaunay triangulating mesh with " << V.rows() << " verts" << endl;
+  cout << "Delaunay triangulating mesh with " << V.rows() << " verts" << endl;
 
-	stringstream ss;
-	ss << "Da" << areaBound << "q";
+  stringstream ss;
+  //ss << "Da" << GLOBAL::triangle_max_area << "q";
+  ss << "Da" << areaBound << "q";
 
-	MatrixXd V2;
-	igl::triangle::triangulate(V, E, H, VM, EM, ss.str().c_str(), V2, faces, orig);
+  MatrixXd V2;
+  igl::triangle::triangulate(V, E, H, VM, EM, ss.str().c_str(), V2, faces, orig);
 
-	verts.resize(V2.rows(), 3);
-	flood_fill(faces, orig);
+  verts.resize(V2.rows(), 3);
+  flood_fill(faces, orig);
 
   // 3D-fying the tile.
-	for(int i=0; i<verts.rows(); i++) {
-		verts(i, 0) = V2(i, 0);
-		verts(i, 1) = V2(i, 1);
-		verts(i, 2) = z;
-	}
+  for(int i=0; i<verts.rows(); i++) {
+    verts(i, 0) = V2(i, 0);
+    verts(i, 1) = V2(i, 1);
+    verts(i, 2) = z;
+  }
 }
 
 void Tile::triangulateSlices(double areaBound,
@@ -181,8 +198,8 @@ void Tile::triangulateSlices(double areaBound,
 
   // If the bottom vertices is not empty, just use what you have.
   if (botV.rows() == 0) {
-    triangulateSlice(bottom_, 0.0, areaBound, botV, botF, botO);
+    triangulateSlice(bottom_, 0.0, areaBound, botV, botF, botO, allowed_bot_);
   }
 
-  triangulateSlice(top_, botV(0, 2) + thickness, areaBound, topV, topF, topO);
+  triangulateSlice(top_, botV(0, 2) + thickness, areaBound, topV, topF, topO, allowed_top_);
 }

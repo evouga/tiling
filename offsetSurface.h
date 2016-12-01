@@ -26,11 +26,13 @@ void generateOffsetSurface(
     Triangulation &T
     );
 
+// Returns offset vertices, faces, and original markers.
 void generateOffsetSurface_naive(
     const Eigen::MatrixXd &V,
     const Eigen::MatrixXi &TT,
+    const Eigen::VectorXi &TO,
     const Eigen::VectorXd &C, double off,
-    Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff);
+    Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff);
 
 } // namespace OffsetSurface
 

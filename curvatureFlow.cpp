@@ -4,6 +4,7 @@
 #include <igl/boundary_facets.h>
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
+#include <igl/invert_diag.h>
 #include <igl/jet.h>
 #include <igl/harmonic.h>
 #include <igl/massmatrix.h>
@@ -13,7 +14,7 @@
 
 #include "glob_defs.h"
 
-static constexpr double gStoppingCriteria = 0.01;
+static constexpr double gStoppingCriteria = 0.0;
 
 #define FACE_DIM  3
 
@@ -268,16 +269,28 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
   igl::viewer::Viewer v;
   v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
-    // Press spacebar to get the next version.
-    if (key == ' ') {
+    if (key == 'L') {
+      // Recompute the Laplacian
+      igl::cotmatrix(Vc,F,L);
+      printf("Recomputing Laplacian...\n");
+    } else if (key == 'R') {
+      printf("Resetting..\n");
+      Vc = V;
+      v.data.set_vertices(V);
+      return true;
+    } else if (key == ' ') {
+      // Press spacebar to get the next version.
+      
       // Recompute M, leave L alone.
       igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
+      //igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_VORONOI,M);
       //igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_BARYCENTRIC,M);
 
       // How much should we change by?
       Eigen::MatrixXd D;
       //Eigen::MatrixXd V_bc = igl::slice(Vc, b, 1);
       igl::harmonic(L,M, b,V_bc, 2, D);
+      //igl::harmonic(Vc,F, b,V_bc, 2, D);
 
       // Calculate the difference.
       double diff = 0;
@@ -287,9 +300,17 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       }
       printf("Difference this round is %f\n", diff);
       
+      // Update the values.
       //Vc = Vc + D;
       Vc = D;
 
+      // Calculate the energy.
+      Eigen::SparseMatrix<double> Mi;
+      igl::invert_diag(M,Mi);
+      auto en = (Vc.transpose() * L * Mi * L * Vc).trace();
+      std::cout << "Energy is " << en << std::endl;
+      
+      // Set the colors.
       Eigen::MatrixXd cols;
       igl::jet(orig, true, cols);
       v.data.set_vertices(Vc);
@@ -298,10 +319,17 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     return true;
   };
 
+  printf("Mesh has %d verts and %d faces\n", Vc.rows(), F.rows());
   printf("\nViewing biharmonic mesh.\n");
   printf("  Press ' ' (space) to deform shape progressively\n");
+  printf("  Press 'L' to (re)compute the Laplacian\n");
+  printf("  Press 'R' to reset the vertices\n");
   printf("  Close down image to return shape to previous function\n");
   v.data.set_mesh(Vc, F);
+  Eigen::MatrixXd cols;
+  igl::jet(orig, true, cols);
+  v.data.set_vertices(Vc);
+  v.data.set_colors(cols);
   v.launch();
 
 }
@@ -313,12 +341,13 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                           double timestep,
                           Eigen::MatrixXd &Vc) {
   // Compute the gradient/laplacian
-  Eigen::SparseMatrix<double> L, M;
+  Eigen::SparseMatrix<double> L, Lo, M;
   igl::cotmatrix(V, F, L);
   Eigen::MatrixXd U;
   Vc = V;
   double difference;
-
+  
+  Lo = L;
   // Set the original rows to zero in the Laplace matrix
   L.prune([&orig](int r, int c, float) {
     return (orig(r) != GLOBAL::original_marker);// || (r == c);
@@ -365,7 +394,15 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     }
     printf("difference this round is %lf (stop is %lf)\n",
            difference, gStoppingCriteria);
+      
+    // Update the values.
     Vc = U;
+
+    // Calculate the energy.
+    Eigen::SparseMatrix<double> Mi;
+    igl::invert_diag(M,Mi);
+    auto en = (Vc.transpose() * Lo * Mi * Lo * Vc).trace();
+    std::cout << "Energy is " << en << std::endl;
 
     v.data.set_mesh(Vc, F);
     v.launch();

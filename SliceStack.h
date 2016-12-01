@@ -17,10 +17,20 @@ public:
     return numSlices_;
   }
 
+  // Will triangulate a slice starting at the bottomIndex and going to the
+  // next index. If botverts is non-empty, it will not alter botverts.
+  // Also, can optionally pass vectors of allowed contours. If the size of
+  // these contours is empty, it will include all contours.
 	void triangulateSlice(int bottomidx, double areaBound,
                         Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces,
                         Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
                         Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig);
+	void triangulateSlice(int bottomidx, double areaBound,
+                        Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces,
+                        Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces,
+                        Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig,
+                        const std::vector<int> &allowed_bot,
+                        const std::vector<int> &allowed_top);
 
   // Triangulate the side, keeping a certain constant coordinate (see .cpp file)
   // All of these points will be along fixedCoord.
@@ -57,16 +67,6 @@ private:
 	std::vector<double> heights_;
   Eigen::MatrixXd bbox_;
 
-  // Variable used by triangle to determine the maximum area of each triangle.
-  // See -a flag. Lower value creates smaller triangles. With "hack" in place
-  // (see Tile.cpp), a value of 0.04 isn't terrible.
-  //const float triangle_max_area = 0.04;
-  const float triangle_max_area = 0.01;
-  // Variable used by tetgen to determine the maximum allowed *ratio* between
-  // the radius and the area. See -q flag. With "hack" in place (see Tile.cpp),
-  // a value of 1.4 isn't terrible.
-  //const float tetgen_max_rad_ratio = 1.4;
-  const float tetgen_max_rad_ratio = 1.1;
 };
 
 #endif

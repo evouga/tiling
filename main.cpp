@@ -44,6 +44,15 @@ void improveMesh(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &orig, 
   F = Fo;
 }
 
+// Returns the genus of the given mesh. Genus can be calculated with Euler's formula:
+//   2 (1 - g) = #V - #E + #F
+// 
+// Given are #V and #F, all that is needed is computing #E
+int getGenus(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F) {
+  // The number of edges is (F.rows() * 3) / 2
+  return (V.rows() - 0.5 * F.rows() - 2) / 2;
+}
+
 void extractShell(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXi &orig,
                   Eigen::MatrixXd &triV, Eigen::MatrixXi &triF, Eigen::VectorXi &triOrig) {
   Eigen::MatrixXd Vo;
@@ -62,132 +71,6 @@ void extractShell(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eige
       triOrig(J(i)) = orig(i);
     }
   }
-  /*
-  for (int i = 0; i < triOrig.rows(); ++i) {
-    printf("%d -> %d\n", i, J(i));
-    triOrig(i) = orig(J(i));
-  }
-  */
-
-  return;
-
-  // Comment the rest of this out.
-  igl::copyleft::cgal::outer_hull(V,F, Vo,Fo, J,flip);
-
-  origo.resize(Vo.rows());
-  origo = Eigen::VectorXi::Constant(Vo.rows(), GLOBAL::nonoriginal_marker);
-
-  // Need to set the original, based off of the original from the former.
-  int no = 0;
-  for (int i = 0; i < Fo.rows(); ++i) {
-    // Get the row from F
-    const auto& Frow = F.row(J(i));
-
-    for (int j = 0; j < Fo.cols(); ++j) {
-      if (orig(Frow(j)) == GLOBAL::original_marker) {
-        origo(Fo(i, j)) = GLOBAL::original_marker;
-        no++;
-      }
-    }
-  }
-
-  triV = Vo;
-  triF = Fo;
-  triOrig = origo;
-
-
-  fprintf(stderr,"Verts now %d (vs %d), F:%d (vs %d), o:%d\n",
-         triV.rows(),Vo.rows(), triF.rows(), Fo.rows(), triOrig.rows());
-
-  /*
-  // Remove the bottom
-  double zmin = Vo(0,2);
-  for (int i = 0; i < Vo.rows(); ++i) {
-    if (Vo(i, 2) < zmin) zmin = Vo(i, 2);
-  }
-  Eigen::VectorXi newIdx(Vo.rows());
-  Eigen::VectorXi usedV(Vo.rows());
-  usedV.setZero();
-  for (int i = 0; i < Fo.rows(); ++i) {
-    for (int j = 0; j < Fo.cols(); ++j) {
-      // If we're at the min
-      if (Vo(Fo(i, j)) == zmin) {
-        // Check to see if any of our neighbors are not the min.
-        bool valid = false;
-        for (int k = 0; k < Fo.cols(); ++k) {
-          if (Vo(Fo(i, (j + k) % Fo.cols())) != zmin) {
-            valid = true;
-            break;
-          }
-        }
-
-        if (valid) {
-          usedV(Fo(i, j)) = 1;
-        }
-      } else {
-        usedV(Fo(i, j)) = 1;
-      }
-    }
-  }
-
-  // Create the new V vector and the map from indices of one to indices of the other.
-  int tempV = 0;
-  for (int i = 0; i < Vo.rows(); ++i) {
-    if (usedV(i)) tempV++;
-  }
-  triV.resize(tempV, 3);
-  // Also update triOrig
-  triOrig.resize(tempV);
-  tempV = 0;
-  Eigen::VectorXi Vmap(Vo.rows());
-  for (int i = 0; i < Vo.rows(); ++i) {
-    if (usedV(i)) {
-      triV.row(tempV) = Vo.row(i);
-      triOrig(tempV) = origo(i);
-      Vmap(i) = tempV++;
-    } else {
-      Vmap(i) = -1;
-    }
-  }
-  // Also remove unused faces
-  int tempF = 0;
-  for (int i = 0; i < Fo.rows(); ++i) {
-    bool used = true;
-    for (int j = 0; j < Fo.cols(); ++j) {
-      if (!usedV(Fo(i, j))) {
-        used = false;
-        break;
-      }
-    }
-    if (used) {
-      tempF++;
-    }
-  }
-  triF.resize(tempF, Fo.cols());
-  tempF = 0;
-  for (int i = 0; i < Fo.rows(); ++i) {
-    bool used = true;
-    for (int j = 0; j < Fo.cols(); ++j) {
-      if (!usedV(Fo(i, j))) {
-        used = false;
-        break;
-      }
-    }
-    if (used) {
-      triF.row(tempF) = Fo.row(i);
-      tempF++;
-    }
-  }
-  // Update the inidices of F.
-  for (int i = 0; i < triF.rows(); ++i) {
-    for (int j = 0; j < triF.cols(); ++j) {
-      // Get the new V
-      triF(i, j) = Vmap(triF(i, j));
-    }
-  }
-
-  printf("Sizes: V:%d(vs %d) F:%d no:%d\n", triV.rows(), Vo.rows(), triF.rows(), no);
-  */
 }
 
 
@@ -273,32 +156,6 @@ void combineMeshes_2(
   V = Vu;
   F = Fu;
   O = Ou;
-
-  /*
-  // Make sure the vertices are all unique
-	// Get all the unique vertices
-	Eigen::MatrixXd Vu;
-	// contains mapping from unique to all indices
-	// Size: #V
-	Eigen::VectorXi unique_to_all;
-	// contains mapping from all indices to unique
-	// Size: #V_rep
-	Eigen::VectorXi all_to_unique;
-	igl::unique_rows(V, Vu,unique_to_all,all_to_unique);
-  // Remember these.
-  V = Vu;
-
-  // Also need to update faces.
-  for (int i = 0; i < F.rows(); ++i) {
-    for (int j = 0; j < 3; ++j) {
-      F(i, j) = all_to_unique(F(i, j));
-    }
-  }
-  // And remove duplicate faces.
-  Eigen::MatrixXi Fu;
-  igl::unique_rows(F, Fu,unique_to_all,all_to_unique);
-  F = Fu;
-  */
 }
 
 // Can pass in topverts, topfaces, and toporig if you want to use them.
@@ -307,16 +164,18 @@ void getOffsetSurface(
     Eigen::MatrixXd &botverts, Eigen::MatrixXi &botfaces, Eigen::VectorXi &botorig,
     Eigen::MatrixXd &topverts, Eigen::MatrixXi &topfaces, Eigen::VectorXi &toporig,
     Eigen::MatrixXd &offsetV, Eigen::MatrixXi &offsetF, Eigen::VectorXi &orig,
+    const std::vector<int> &allowed_bot, const std::vector<int> &allowed_top,
     bool view=false) {
   igl::viewer::Viewer v;
 
-  ss.triangulateSlice(bot_slice_no, 0.005,
+  ss.triangulateSlice(bot_slice_no, GLOBAL::triangle_max_area,
                       botverts, botfaces, topverts, topfaces,
-											botorig, toporig);
+											botorig, toporig, allowed_bot, allowed_top);
 
   if (view) {
     Eigen::MatrixXd C;
     igl::jet(botorig, true, C);
+    v.data.clear();
     v.data.set_mesh(botverts, botfaces);
     v.data.set_face_based(true);
     v.data.set_colors(C);
@@ -363,9 +222,13 @@ void getOffsetSurface(
   //OffsetSurface::Triangulation T;
   //generateOffsetSurface(TV, TT, Z, offset, offsetV, offsetF, T);
   OffsetSurface::generateOffsetSurface_naive(
-      TV, TT, Z, offset, offsetV, offsetF);
+      TV, TT, TO, Z, offset, offsetV, offsetF, orig);
   if (view) {
+    v.data.clear();
     v.data.set_mesh(offsetV, offsetF);
+    Eigen::MatrixXd origCols;
+    igl::jet(orig, true, origCols);
+    v.data.set_colors(origCols);
     v.launch();
   }
 
@@ -378,17 +241,21 @@ void getOffsetSurface(
     offset = (offset + 1.0) / 2.0;
     //generateOffsetSurface(T, offset, offsetV, offsetF);
     OffsetSurface::generateOffsetSurface_naive(
-        TV, TT, Z, offset, offsetV, offsetF);
+        TV, TT, TO, Z, offset, offsetV, offsetF, orig);
     igl::components(offsetF, comp);
     nc = nComponents(comp);
     if (view) {
       v.data.clear();
       v.data.set_mesh(offsetV, offsetF);
       v.data.set_face_based(true);
+      Eigen::MatrixXd origCols;
+      igl::jet(orig, true, origCols);
+      v.data.set_colors(origCols);
       v.launch();
     }
   }
 
+  /*
   auto maxs = offsetV.colwise().maxCoeff();
   auto mins = offsetV.colwise().minCoeff();
   orig.resize(offsetV.rows());
@@ -401,29 +268,82 @@ void getOffsetSurface(
       orig(i) = GLOBAL::nonoriginal_marker;
     }
   }
+  */
 }
 
+struct assignment {
+  std::vector<std::vector<int>> index_assignments;
+  Eigen::MatrixXd V, topverts;
+  Eigen::MatrixXi F, topfaces;
+  Eigen::VectorXi O, toporig;
+  int genus, n_components;
+};
+
+
+// Recursively (DFS) generates all valid assignments of contours.
+// Quits when the genus is non-zero.
+void generateAssignmentsRecurs(SliceStack& ss, int next_slice_no,
+                               int next_contour, assignment& cur_asst,
+                               std::vector<assignment> &assts) {
+  Eigen::MatrixXd V, topverts, botverts = cur_asst.topverts;
+  Eigen::MatrixXi F, topfaces, botfaces = cur_asst.topfaces;
+  Eigen::VectorXi O, toporig, botorig = cur_asst.toporig;
+
+  std::vector<int> &allowed = cur_asst.index_assignments.back();
+  allowed.push_back(next_contour);
+  getOffsetSurface(next_slice_no, ss,
+                   botverts, botfaces, botorig,
+                   topverts, topfaces, toporig,
+                   V, F, O,
+                   allowed /* won't use this */, allowed);
+
+  int genus = getGenus(V, F);
+  if (genus == 0) {
+    // See if we're finished.
+    int next_size = ss.getSizeAt(next_slice_no + 1);
+    if (next_size == 0 || next_size == -1) {
+      // Done!
+    }
+    // Add an empty vector of allowed things.
+    cur_asst.index_assignments.push_back(std::vector<int>());
+    // Recurse with all children.
+    for (int i = 0; i < ss.getSizeAt(next_slice_no + 1); ++i) {
+      generateAssignmentsRecurs(ss, next_slice_no + 1, i, cur_asst, assts);
+    }
+  }
+}
+
+
 int main(int argc, char *argv[]) {
-  if(argc != 3) {
-    cerr << "Must specify the base filename and object name" << endl;
+  if(argc < 3) {
+    fprintf(stderr, "usage: %s <BASE_FILENAME> <CONTOUR_NAME> [<good_start> <num_slices>]\n",
+            argv[0]);
     return -1;
   }
 
   SliceStack ss(argv[1], argv[2]);
 
   cout << "Loaded " << ss.getNumSlices() << " slices" << endl;
-  int good_start = -1;
-  for (int i = 0; i < ss.getNumSlices(); ++i) {
-    if (ss.getSizeAt(i) > 0) {
-      good_start = i;
-      printf("Using slice number %d\n", good_start);
-      break;
+  int good_start = 0;
+  int num_slices = 10;
+  if (argc == 5) {
+    good_start = atoi(argv[3]);
+    num_slices = atoi(argv[4]);
+  }
+
+  while (ss.getSizeAt(good_start) == 0) {
+    good_start++;
+    if (good_start > ss.getNumSlices()) {
+      // Quit now.
+      printf("ERROR: Couldn't find valid slices!\n");
+      return -1;
     }
   }
-  if (good_start < 0) {
-    printf("ERROR: Couldn't find valid slices!\n");
-    return -1;
-  }
+  printf("Starting with slice number %d\n", good_start);
+
+  // Use an empty vector to allow everything.
+  //std::vector<int> all_allowed = {0};
+  std::vector<int> all_allowed;
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   Eigen::VectorXi orig;
@@ -437,26 +357,32 @@ int main(int argc, char *argv[]) {
   getOffsetSurface(good_start, ss,
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
-                   bV, bF, borig, false);
+                   bV, bF, borig, all_allowed, all_allowed, true);
 
-  int numRows = 10;
-  for (int i = 1; i < numRows; ++i) {
+  good_start++;
+  int size = ss.getSizeAt(good_start);
+  int num = 0;
+  while (size > 0 && num++ < num_slices) {
     // Next time's bottom will be last time's top.
     botverts = topverts;
     botfaces = topfaces;
     botorig = toporig;
 
     // Get the next cube, using stuff from last time.
-    getOffsetSurface(good_start + i, ss,
+    getOffsetSurface(good_start, ss,
                      botverts, botfaces, botorig,
                      topverts, topfaces, toporig,
-                     tV, tF, torig, false /* display */);
+                     tV, tF, torig, all_allowed, all_allowed, false /* display */);
 
 
     combineMeshes_2(bV, bF, borig, tV, tF, torig, V, F, orig, false);
     bV = V;
     bF = F;
     borig = orig;
+  
+    // Get the size of the next contour.
+    good_start++;
+    size = ss.getSizeAt(good_start);
   }
 
   // Display them

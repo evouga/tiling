@@ -36,6 +36,17 @@ namespace GLOBAL {
   const int RIGHT = 1;
   const int FRONT = 2;
   const int BACK = 3;
+  
+  // Variable used by triangle to determine the maximum area of each triangle.
+  // See -a flag. Lower value creates smaller triangles. With "hack" in place
+  // (see Tile.cpp), a value of 0.04 isn't terrible.
+  //const float triangle_max_area = 0.04;
+  const float triangle_max_area = 0.005;
+  // Variable used by tetgen to determine the maximum allowed *ratio* between
+  // the radius and the area. See -q flag. With "hack" in place (see Tile.cpp),
+  // a value of 1.4 isn't terrible.
+  //const float tetgen_max_rad_ratio = 1.4;
+  const float tetgen_max_rad_ratio = 1.1;
 }
 
 #endif

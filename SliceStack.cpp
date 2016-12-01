@@ -61,12 +61,23 @@ void SliceStack::triangulateSlice(int start, double areaBound,
                                   Eigen::MatrixXd &botV, Eigen::MatrixXi &botF,
                                   Eigen::MatrixXd &topV, Eigen::MatrixXi &topF,
                                   Eigen::VectorXi &botO, Eigen::VectorXi &topO) {
+  // Call the triangulateSlice with empty parameters.
+  std::vector<int> all_empty;
+  triangulateSlice(start, areaBound, botV,botF, topV,topF, botO, topO, all_empty, all_empty);
+}
+
+void SliceStack::triangulateSlice(int start, double areaBound,
+                                  Eigen::MatrixXd &botV, Eigen::MatrixXi &botF,
+                                  Eigen::MatrixXd &topV, Eigen::MatrixXi &topF,
+                                  Eigen::VectorXi &botO, Eigen::VectorXi &topO,
+                                  const std::vector<int> &allowed_bot,
+                                  const std::vector<int> &allowed_top) {
   assert(start >= 0 && start < slices_.size());
 
   printf("PRE Number of vertices: ");
   printf("top %lu bot %lu\n", topV.rows(), botV.rows());
 
-  Tile t(*slices_[start], *slices_[start+1], bbox_);
+  Tile t(*slices_[start], *slices_[start+1], bbox_, allowed_bot, allowed_top);
   t.triangulateSlices(areaBound, botV, botF, topV, topF, botO, topO);
 
   printf("Number of vertices: top %lu bot %lu\n", topV.rows(), botV.rows());
@@ -187,7 +198,7 @@ void SliceStack::triangulateSide(int constantCoord,
   Eigen::MatrixXd tmpV;
 
   stringstream params;
-  params << "DYa" << triangle_max_area << "q";
+  params << "DYa" << GLOBAL::triangle_max_area << "q";
 
 	cout << "Delaunay triangulating mesh with " << inputV.rows() << " verts" << endl;
   cout << "parameters are " << params.str() << endl;
@@ -402,6 +413,8 @@ void SliceStack::tetrahedralizeSlice (
   printf("After removing dups, sizes are dups:%lu uniq:%lu other?:%lu\n",
          V_rep.rows(), V.rows(), all_to_unique.rows());
 
+  // These markers are special: non-zero markers are saved, zero markers are 
+  // assigned based on facets.
   // Get unique markers for M
   Eigen::VectorXi M(V.rows());
   M.setZero();  // Make sure it's zero to start.
@@ -409,10 +422,14 @@ void SliceStack::tetrahedralizeSlice (
     int new_i = all_to_unique(i);
     // If it has been set before, set it to the largest one (original > nonoriginal)
     M(new_i) = max(M(new_i), M_rep(i));
+    if (M(new_i) != GLOBAL::original_marker) {
+      M(new_i) = 0;
+    }
   }
 
   //igl::writeOFF("foo.off", V, F);
 
+  // Facet markers should be non-zero for boundary markers.
 	Eigen::VectorXi FM(F.rows());
 	for (int i = 0; i < F.rows(); ++i) {
 		if (M(F(i,0)) == GLOBAL::original_marker &&
@@ -437,11 +454,44 @@ void SliceStack::tetrahedralizeSlice (
 	// TF will have the "" face indices (#V x 3)
 	// TO will have the "" vertex markers
   stringstream params;
-  params << "pq" << tetgen_max_rad_ratio << "Y";
+  params << "pq" << GLOBAL::tetgen_max_rad_ratio << "Y";
   igl::copyleft::tetgen::tetrahedralize(V,F,M,FM, params.str().c_str(), TV,TT,TF,TO);
   igl::writeOFF("foo_tet.off", TV, TF);
+
+  Eigen::VectorXi TO_prev = TO;
+  // tetgen adds some weird markers. Let's standardize them here.
+  int num_bad = 0;
+  for (int i = 0; i < TO.rows(); ++i) {
+    if (TO(i) != GLOBAL::original_marker) {
+      if (TO(i) != GLOBAL::nonoriginal_marker) {
+        num_bad++;
+      }
+      TO(i) = GLOBAL::nonoriginal_marker;
+    }
+  }
+  /*
+  Eigen::MatrixXi TO_both(TO_prev.rows(), 2);
+  TO_both << TO_prev, TO;
+  cout << TO_both << endl;
+
+  Eigen::MatrixXd cols;
+  igl::viewer::Viewer v;
+  v.data.clear();
+  v.data.set_mesh(TV, TF);
+  // Color by old values
+  igl::jet(TO, true, cols);
+  v.data.set_colors(cols);
+  v.launch();
+  // Color according to old TO things
+  igl::jet(TO_prev, true, cols);
+  v.data.set_colors(cols);
+  v.launch();
+  */
+
+
   printf("Tetrahedralize done\n");
   printf("Number of faces before:%lu and after:%lu\n", F.rows(), TF.rows());
+  printf("Number of original markers: %lu, num bad: %d\n", TO.rows(), num_bad);
 }
 
 void SliceStack::computeLaplace(int slice_no,
