@@ -156,7 +156,7 @@ void getOffsetSurface(
     bool view=false) {
   igl::viewer::Viewer v;
 
-  ss.triangulateSlice(bot_slice_no, GLOBAL::triangle_max_area,
+  ss.triangulateSlice(bot_slice_no, GLOBAL::TRI_AREA,
                       botverts, botfaces, topverts, topfaces,
 											botorig, toporig, allowed_bot, allowed_top);
 
@@ -241,6 +241,32 @@ void getOffsetSurface(
     }
   }
 
+  if (view) {
+  // Some debug stuff
+  igl::writeOFF("debug_tets.off", TV, TF);
+  // Now need to write the tets and heats as well
+  FILE* tet_of = fopen("debug_tets.txt", "w");
+  for (int i = 0; i < TT.rows(); ++i) {
+    for (int j = 0; j < TT.cols(); ++j) {
+      fprintf(tet_of, "%d ", TT(i, j));
+    }
+    fprintf(tet_of, "\n");
+  }
+  fclose(tet_of);
+  // Heats
+  FILE* heat_of = fopen("debug_heats.txt", "w");
+  for (int i = 0; i < Z.rows(); ++i) {
+    fprintf(heat_of, "%lf\n", Z(i));
+  }
+  fclose(heat_of);
+  // Origs
+  FILE* orig_of = fopen("debug_orig.txt", "w");
+  for (int i = 0; i < TO.rows(); ++i) {
+    fprintf(orig_of, "%d\n", TO(i));
+  }
+  fclose(orig_of);
+  }
+
   /*
   auto maxs = offsetV.colwise().maxCoeff();
   auto mins = offsetV.colwise().minCoeff();
@@ -255,49 +281,6 @@ void getOffsetSurface(
   }
   */
 }
-
-struct assignment {
-  std::vector<std::vector<int>> index_assignments;
-  Eigen::MatrixXd V, topverts;
-  Eigen::MatrixXi F, topfaces;
-  Eigen::VectorXi O, toporig;
-  int genus, n_components;
-};
-
-
-// Recursively (DFS) generates all valid assignments of contours.
-// Quits when the genus is non-zero.
-void generateAssignmentsRecurs(SliceStack& ss, int next_slice_no,
-                               int next_contour, assignment& cur_asst,
-                               std::vector<assignment> &assts) {
-  Eigen::MatrixXd V, topverts, botverts = cur_asst.topverts;
-  Eigen::MatrixXi F, topfaces, botfaces = cur_asst.topfaces;
-  Eigen::VectorXi O, toporig, botorig = cur_asst.toporig;
-
-  std::vector<int> &allowed = cur_asst.index_assignments.back();
-  allowed.push_back(next_contour);
-  getOffsetSurface(next_slice_no, ss,
-                   botverts, botfaces, botorig,
-                   topverts, topfaces, toporig,
-                   V, F, O,
-                   allowed /* won't use this */, allowed);
-
-  int genus = getGenus(V, F);
-  if (genus == 0) {
-    // See if we're finished.
-    int next_size = ss.getSizeAt(next_slice_no + 1);
-    if (next_size == 0 || next_size == -1) {
-      // Done!
-    }
-    // Add an empty vector of allowed things.
-    cur_asst.index_assignments.push_back(std::vector<int>());
-    // Recurse with all children.
-    for (int i = 0; i < ss.getSizeAt(next_slice_no + 1); ++i) {
-      generateAssignmentsRecurs(ss, next_slice_no + 1, i, cur_asst, assts);
-    }
-  }
-}
-
 
 int main(int argc, char *argv[]) {
   if(argc < 3) {

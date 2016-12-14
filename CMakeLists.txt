@@ -65,18 +65,30 @@ message("libIGL extra sources: ${LIBIGL_EXTRA_SOURCES}")
 message("libIGL extra libraries: ${LIBIGL_EXTRA_LIBRARIES}")
 message("libIGL definitions: ${LIBIGL_DEFINITIONS}")
 
+# Also need libtourtre
+find_package(libtourtre REQUIRED)
+
+if (NOT LIBTOURTRE_FOUND)
+  message(FATAL_ERROR "libtourtre not found -- You can download it using: \n git clone https://github.com/sedillard/libtourtre.git")
+endif(NOT LIBTOURTRE_FOUND)
+message("libtourtre includes: ${LIBTOURTRE_INCLUDE_DIR}")
+message("libtourtre lib: ${LIBTOURTRE_LIB}")
+
 ### Prepare the build environment
-include_directories(${LIBIGL_INCLUDE_DIRS})
+include_directories(${LIBIGL_INCLUDE_DIRS} ${LIBTOURTRE_INCLUDE_DIR})
 add_definitions(${LIBIGL_DEFINITIONS})
 
 ### Add your project files
-SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp")
+SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp")
 message("Removing binary files ${BINARY_FILES}")
 FILE(GLOB SRCFILES *.cpp)
 LIST(REMOVE_ITEM SRCFILES ${BINARY_FILES})
 message("Project sources are: ${SRCFILES}")
 add_executable(${PROJECT_NAME}_bin main.cpp ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
-target_link_libraries(${PROJECT_NAME}_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_bin ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})
 
 add_executable(test_harmonic_bin test_harmonic.cpp curvatureFlow.cpp ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+
+add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_SOURCES})
+target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
