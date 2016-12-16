@@ -243,4 +243,4 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
   Foff = Fu;
 }
 
-}
+} // namespace OffsetSurface

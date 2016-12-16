@@ -1,11 +1,14 @@
 #include "TilingUtils.h"
 
+#include <iostream>
 #include <set>
 #include <numeric> // iota
 
 #include <igl/components.h>
 #include <igl/jet.h>
 #include <igl/viewer/Viewer.h>
+#include "offsetSurface.h"
+#include "glob_defs.h"
 
 
 extern "C" 
@@ -13,7 +16,7 @@ extern "C"
 #include <tourtre.h>
 }
 
-#include "offsetSurface.h"
+using namespace std;
 
 namespace {
 
@@ -109,8 +112,11 @@ void extractTreeVerts(ctBranch *b, std::vector<TilingUtils::ConnectedComponent> 
                                              */
 }
 
-void outputTree(ctBranch* b, tourtre_data* tdat, std::vector<int> &nodes) {
+void outputTree(ctBranch* b, tourtre_data* tdat, std::vector<int> &nodes,
+                std::set<double> &unique_offsets) {
   if ( (tdat->_H(b->saddle) > 0 && tdat->_H(b->saddle) < 1)) {
+    unique_offsets.insert(tdat->_H(b->extremum));
+    unique_offsets.insert(tdat->_H(b->saddle));
     printf("(%d:%f %d:%f", b->extremum, tdat->_H(b->extremum),
            b->saddle, tdat->_H(b->saddle));
   }
@@ -119,7 +125,7 @@ void outputTree(ctBranch* b, tourtre_data* tdat, std::vector<int> &nodes) {
 
 	for ( ctBranch * c = b->children.head; c != NULL; c = c->nextChild ){
     printf(" ");
-		outputTree( c, tdat, nodes );
+		outputTree( c, tdat, nodes, unique_offsets);
 	}
 	
 	printf(")");
@@ -129,11 +135,171 @@ void outputTree(ctBranch* b, tourtre_data* tdat, std::vector<int> &nodes) {
 
 namespace TilingUtils {
 
+ConnectedComponent::ConnectedComponent(double offset,
+                                       const Eigen::MatrixXd &V,
+                                       const Eigen::MatrixXi &F,
+                                       const set<int> &vertices_used) :
+    offsetVal(offset) {
+  // Get all the faces used by the vertices.
+  set<int> faces_used;
+  for (int i = 0; i < F.rows(); i++) {
+    bool use = true;
+    for (int j = 0; j < F.cols(); j++)
+      use &= (vertices_used.find(F(i, j)) != vertices_used.end());
+    if (use)
+      faces_used.insert(i);
+  }
+
+  // Fix to appropriate sizes.
+  this->V.resize(vertices_used.size(), 3);
+  this->O.resize(vertices_used.size(), 3);
+  this->F.resize(faces_used.size(), 3);
+
+  // Create mapping and adjust vertices.
+  map<int, int> original_to_new_vertex;
+  int new_vertex = 0;
+  for (int original_vertex : vertices_used) {
+    this->V.row(new_vertex) = V.row(original_vertex);
+    this->O.row(new_vertex) = O.row(original_vertex);
+    original_to_new_vertex[original_vertex] = new_vertex++;
+  }
+
+  // Adjust faces.
+  int face_index = 0;
+  for (int i : faces_used) {
+    for (int j = 0; j < F.cols(); j++)
+      this->F(face_index, j) = original_to_new_vertex[F(i, j)];
+    face_index++;
+  }
+}
+
+void ConnectedComponent::render() const {
+  igl::viewer::Viewer viewer;
+  viewer.data.set_mesh(this->V, this->F);
+  viewer.launch();
+}
+
+void dfs(int vertex_index, set<int> &visited, set<int> &vertices_used,
+         const Eigen::MatrixXi &F) {
+  for (int i = 0; i < F.rows(); i++) {
+    bool explore = false;
+    for (int j = 0; j < F.cols(); j++)
+      explore |= (F(i, j) == vertex_index);
+    if (!explore)
+      continue;
+
+    for (int j = 0; j < F.cols(); j++) {
+      int neighbor_vertex = F(i, j);
+      if (visited.find(neighbor_vertex) != visited.end())
+        continue;
+
+      visited.insert(neighbor_vertex);
+      vertices_used.insert(neighbor_vertex);
+      dfs(neighbor_vertex, visited, vertices_used, F);
+    }
+  }
+}
+
+vector<ConnectedComponent> getConnectedComponents(const Eigen::MatrixXd &V,
+                                                  const Eigen::MatrixXi &F,
+                                                  const Eigen::VectorXi &O,
+                                                  double offset) {
+  vector<ConnectedComponent> components;
+
+  set<int> visited;
+  for (int i = 0; i < V.rows(); i++) {
+    if (visited.find(i) != visited.end())
+      continue;
+    visited.insert(i);
+
+    set<int> vertices_used;
+    dfs(i, visited, vertices_used, F);
+    components.push_back(ConnectedComponent(offset, V, F, vertices_used));
+  }
+
+  return components;
+}
+
+void addVerticesToContour(int vertex_index,
+                          set<int>& visited, set<int> &vertices_used,
+                          const Eigen::MatrixXi &F, const Eigen::VectorXi &O) {
+  for (int i = 0; i < F.rows(); i++) {
+    bool explore = false;
+    for (int j = 0; j < F.cols(); j++)
+      explore |= (F(i, j) == vertex_index);
+    if (!explore)
+      continue;
+
+    for (int j = 0; j < F.cols(); j++) {
+      int neighbor_vertex = F(i, j);
+      if (visited.find(neighbor_vertex) != visited.end())
+        continue;
+      else if (O(neighbor_vertex) != GLOBAL::original_marker)
+        continue;
+
+      visited.insert(neighbor_vertex);
+      vertices_used.insert(neighbor_vertex);
+      addVerticesToContour(neighbor_vertex, visited, vertices_used, F, O);
+    }
+  }
+}
+
+vector<set<int> > getContourVertices(const Eigen::MatrixXi &F,
+                                     const Eigen::VectorXi &O) {
+  vector<set<int> > all_contours;
+
+  set<int> visited;
+  for (int i = 0; i < O.rows(); ++i) {
+    if (O(i) != GLOBAL::original_marker)
+      continue;
+    else if (visited.find(i) != visited.end())
+      continue;
+
+    visited.insert(i);
+
+    all_contours.push_back(set<int> ());
+
+    set<int> &contour_vertices = all_contours.back();
+    contour_vertices.insert(i);
+    addVerticesToContour(i, visited, contour_vertices, F, O);
+  }
+
+  return all_contours;
+}
+
+set<int> getContoursUsed(const ConnectedComponent &component,
+                         vector<set<int> > &contours,
+                         const Eigen::MatrixXd &V) {
+  set<int> used;
+
+  for (int i = 0; i < component.V.rows(); i++) {
+
+    for (int j = 0; j < contours.size(); j++) {
+      set<int> &contour = contours[j];
+
+      for (int vertex : contour) {
+        double dist = 0.0;
+        for (int k = 0; k < V.cols(); k++) {
+          double tmp = component.V(i, k) - V(vertex, k);
+          dist += tmp * tmp;
+        }
+        if (dist <= 1e-3)
+          used.insert(j);
+      }
+    }
+  }
+
+  cout << endl;
+  for (int a : used)
+    cout << a << " ";
+  cout << endl;
+
+  return used;
+}
+
 std::vector<ConnectedComponent> allPossibleTiles(
     const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
     const Eigen::VectorXi &TO, const Eigen::VectorXd &H) {
-  std::vector<ConnectedComponent> all_ccs;
-
   // Use libtourtre to find all possible saddle points, which leads to all possible
   // connected components.
   // Create data struct
@@ -159,7 +325,8 @@ std::vector<ConnectedComponent> allPossibleTiles(
   ct_cleanup(ctx);
 
   std::vector<int> nodes;
-  outputTree(root, &tdat, nodes);
+  std::set<double> unique_offsets;
+  outputTree(root, &tdat, nodes, unique_offsets);
   Eigen::MatrixXd pts, pts_cols;
   Eigen::VectorXd pts_cols_i;
   pts.resize(nodes.size(), 3);
@@ -197,13 +364,50 @@ std::vector<ConnectedComponent> allPossibleTiles(
       return false;
     };
   viewer.launch();
+
+  vector<ConnectedComponent> all_ccs;
+  vector<set<int> > cc_contours;
+
+  vector<set<int> > contours = getContourVertices(TF, TO);
+
+  for (double offset: unique_offsets) {
+    if (offset < 0.1)
+      continue;
+    cout << offset << endl;
+
+    Eigen::MatrixXd offsetV;
+    Eigen::MatrixXi offsetF;
+    Eigen::VectorXi offsetO;
+    OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
+                                               offset,
+                                               offsetV, offsetF, offsetO);
+    viewer.data.clear();
+    viewer.data.set_mesh(offsetV, offsetF);
+    viewer.launch();
+
+    vector<ConnectedComponent> components = getConnectedComponents(offsetV,
+                                                                   offsetF,
+                                                                   offsetO,
+                                                                   offset);
+    for (const ConnectedComponent &component : components) {
+      bool is_unique = true;
+
+      set<int> tmp = getContoursUsed(component, contours, TV);
+      for (set<int> &cc_contour : cc_contours)
+        is_unique &= (tmp != cc_contour);
+
+      if (is_unique) {
+        cc_contours.push_back(tmp);
+        all_ccs.push_back(component);
+        component.render();
+      }
+    }
+  }
+
   /*
   int num_cc = -1;
   igl::components(offsetF, comp);
-  OffsetSurface::generateOffsetSurface_naive(
-      TV, TT, TO, Z, offset, offsetV, offsetF, orig);
   while(num_cc != 1) {
-    
   }
   */
   return all_ccs;

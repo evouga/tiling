@@ -90,5 +90,5 @@ target_link_libraries(${PROJECT_NAME}_bin ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} 
 add_executable(test_harmonic_bin test_harmonic.cpp curvatureFlow.cpp ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
-add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_SOURCES})
+add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_SOURCES} offsetSurface.cpp)
 target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
