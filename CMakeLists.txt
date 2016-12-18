@@ -92,3 +92,7 @@ target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRA
 
 add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_SOURCES} offsetSurface.cpp)
 target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+
+# Dynamic programming for correct topologies.
+add_executable(tiler_main tiler_main.cpp Tiler.cpp)
+

@@ -21,7 +21,7 @@ using namespace std;
 namespace {
 
 int nComponents(const Eigen::VectorXi &comps) {
-  std::set<int> u;
+  set<int> u;
   for (int i = 0; i < comps.rows(); ++i) {
     u.insert(comps[i]);
   }
@@ -41,7 +41,7 @@ struct tourtre_data {
       : _V(V), _F(F), _T(T), _H(H), _O(O) {}
 
   // Needs function to get neighbors.
-  void getNeighbors(size_t idx, std::vector<size_t> &n) const {
+  void getNeighbors(size_t idx, vector<size_t> &n) const {
     for (int i = 0; i < _T.rows(); ++i) {
       bool found = false;
       for (int j = 0; j < _T.cols(); ++j) {
@@ -88,7 +88,7 @@ double value (size_t idx, void * d) {
 // of valid entries.
 size_t neighbors(size_t idx, size_t *nbrs, void* d) {
   tourtre_data* tdat = static_cast<tourtre_data*>(d);
-  std::vector<size_t> nbrs_buf;
+  vector<size_t> nbrs_buf;
 
   tdat->getNeighbors(idx, nbrs_buf);
   for (int i = 0; i < nbrs_buf.size(); ++i) {
@@ -97,38 +97,20 @@ size_t neighbors(size_t idx, size_t *nbrs, void* d) {
   return nbrs_buf.size();
 }
 
-void extractTreeVerts(ctBranch *b, std::vector<TilingUtils::ConnectedComponent> &ccs, tourtre_data *tdat) {
-  // At each node in the tree, generate the offset surface.
-  int off_vert = b->extremum;
-  double off_value = tdat->_H[off_vert];
-
-  Eigen::MatrixXd V;
-  Eigen::MatrixXi F;
-  Eigen::VectorXi O;
-
-  /*
-  offsetSurface::generateOffsetSurface_naive(tdat->_V, tdat->_T, tdat->_F, tdat->_O,
-                                             off_value, V, F, O);
-                                             */
-}
-
-void outputTree(ctBranch* b, tourtre_data* tdat, std::vector<int> &nodes,
-                std::set<double> &unique_offsets) {
+void outputTree(ctBranch* b, tourtre_data* tdat, vector<int> &nodes,
+                set<double> &unique_offsets) {
   if ( (tdat->_H(b->saddle) > 0 && tdat->_H(b->saddle) < 1)) {
     unique_offsets.insert(tdat->_H(b->extremum));
     unique_offsets.insert(tdat->_H(b->saddle));
-    printf("(%d:%f %d:%f", b->extremum, tdat->_H(b->extremum),
+    printf("(%d:%f %d:%f)\n", b->extremum, tdat->_H(b->extremum),
            b->saddle, tdat->_H(b->saddle));
   }
   nodes.push_back(b->extremum);
   nodes.push_back(b->saddle);
 
 	for ( ctBranch * c = b->children.head; c != NULL; c = c->nextChild ){
-    printf(" ");
 		outputTree( c, tdat, nodes, unique_offsets);
 	}
-	
-	printf(")");
 }
 
 } // namespace
@@ -283,21 +265,16 @@ set<int> getContoursUsed(const ConnectedComponent &component,
           double tmp = component.V(i, k) - V(vertex, k);
           dist += tmp * tmp;
         }
-        if (dist <= 1e-3)
+        if (dist <= GLOBAL::EPS)
           used.insert(j);
       }
     }
   }
 
-  cout << endl;
-  for (int a : used)
-    cout << a << " ";
-  cout << endl;
-
   return used;
 }
 
-std::vector<ConnectedComponent> allPossibleTiles(
+vector<ConnectedComponent> allPossibleTiles(
     const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
     const Eigen::VectorXi &TO, const Eigen::VectorXd &H) {
   // Use libtourtre to find all possible saddle points, which leads to all possible
@@ -305,10 +282,10 @@ std::vector<ConnectedComponent> allPossibleTiles(
   // Create data struct
   tourtre_data tdat(TV, TF, TT, H, TO);
   // Create sorted indices.
-  std::vector<size_t> orders;
+  vector<size_t> orders;
   orders.resize(TV.rows());
-  std::iota(orders.begin(), orders.end(), 0);
-  std::sort(orders.begin(), orders.end(), 
+  iota(orders.begin(), orders.end(), 0);
+  sort(orders.begin(), orders.end(), 
             [H](size_t i1, size_t i2) { return H(i1) < H(i2); });
   // Init libtourtre.
   ctContext *ctx = ct_init(
@@ -324,8 +301,8 @@ std::vector<ConnectedComponent> allPossibleTiles(
   ctBranch* root = ct_decompose(ctx);
   ct_cleanup(ctx);
 
-  std::vector<int> nodes;
-  std::set<double> unique_offsets;
+  vector<int> nodes;
+  set<double> unique_offsets;
   outputTree(root, &tdat, nodes, unique_offsets);
   Eigen::MatrixXd pts, pts_cols;
   Eigen::VectorXd pts_cols_i;
@@ -365,12 +342,27 @@ std::vector<ConnectedComponent> allPossibleTiles(
     };
   viewer.launch();
 
-  vector<ConnectedComponent> all_ccs;
-  vector<set<int> > cc_contours;
+  vector<ConnectedComponent> unique_components;
+  vector<set<int> > contour_combinations;
 
   vector<set<int> > contours = getContourVertices(TF, TO);
+  double previous = -1e5;
+  int split = 0;
 
+  for (int i = 1; i < contours.size(); i++) {
+    set<int> &contour = contours[i];
+    for (int j : contour) {
+      if (TV(j, 2) > previous) {
+        split = i-1;
+      }
+      previous = TV(i, 2);
+    }
+  }
+  cout << 0 << " " << split << " " << contours.size() << endl;
+
+  // Go through all offsets and generate surfaces.
   for (double offset: unique_offsets) {
+    // There is a small offset that creates a crappy surface.
     if (offset < 0.1)
       continue;
     cout << offset << endl;
@@ -381,9 +373,6 @@ std::vector<ConnectedComponent> allPossibleTiles(
     OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
                                                offset,
                                                offsetV, offsetF, offsetO);
-    viewer.data.clear();
-    viewer.data.set_mesh(offsetV, offsetF);
-    viewer.launch();
 
     vector<ConnectedComponent> components = getConnectedComponents(offsetV,
                                                                    offsetF,
@@ -392,25 +381,19 @@ std::vector<ConnectedComponent> allPossibleTiles(
     for (const ConnectedComponent &component : components) {
       bool is_unique = true;
 
-      set<int> tmp = getContoursUsed(component, contours, TV);
-      for (set<int> &cc_contour : cc_contours)
-        is_unique &= (tmp != cc_contour);
+      set<int> used = getContoursUsed(component, contours, TV);
+      for (set<int> &combination : contour_combinations)
+        is_unique &= (used != combination);
 
       if (is_unique) {
-        cc_contours.push_back(tmp);
-        all_ccs.push_back(component);
+        contour_combinations.push_back(used);
+        unique_components.push_back(component);
         component.render();
       }
     }
   }
 
-  /*
-  int num_cc = -1;
-  igl::components(offsetF, comp);
-  while(num_cc != 1) {
-  }
-  */
-  return all_ccs;
+  return unique_components;
 }
 
 } // namespace TilingUtils
