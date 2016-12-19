@@ -14,6 +14,16 @@
 
 namespace Tiler {
 
+// struct Component {
+//   const set<int> &contours_used;
+// };
+//
+// // A tile is a set of components that cover all top and bottom contours.
+// struct Tile {
+//   vector<Component> components;
+//   const Tile *parent;
+// };
+
 /**
  * Each contour is in its own connected component for the first slice.
  *
@@ -31,11 +41,12 @@ std::vector<std::set<int> > generateInitialRequirements(int number_contours);
  * Arguments:
  *  @param bot_count - number of contours on the bot slice.
  *  @param top_count - number of contours on the top slice.
+ *  @param offset - id to start at.
  *  @param bot_ids - the ids of contours on the bot slice.
  *  @param top_ids - the ids of contours on the top slice.
  *  @param both - the ids of of both contours.
  */
-void generateTopAndBottom(int bot_count, int top_count,
+void generateTopAndBottom(int bot_count, int top_count, int offset,
                           std::set<int> &bot_ids, std::set<int> &top_ids,
                           std::set<int> &both);
 
@@ -62,6 +73,7 @@ std::vector<std::set<int> > generatePossibleSubsets(unsigned int total,
  *  @param upper - top contours to cover.
  *  @param previous - which components are connected previously.
  *  @param is_last - requires all top components to be connected.
+ *  @param connectedComponents - used for generating next connected.
  *
  * Returns:
  *  vector of genus 0 tilings.
@@ -70,7 +82,8 @@ bool isValidTiling(const std::vector<std::set<int> > &tile,
                    const std::set<int> &lower,
                    const std::set<int> &upper,
                    const std::vector<std::set<int> > &previous,
-                   bool is_last);
+                   bool is_last,
+                   std::vector<std::vector<int> > &connectedComponents);
 
 /**
  * Populates all valid configurations of connections..

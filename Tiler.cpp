@@ -34,11 +34,11 @@ string binaryRepresentation(uint x, uint binary_width) {
   return string(buffer);
 }
 
-set<int> setRepresentation(uint x, uint binary_width) {
+set<int> setRepresentation(uint x, uint binary_width, const vector<int> &data) {
   set<int> result;
   for (int i = binary_width-1; i >= 0; i--)
     if (getNthBit(x, i))
-      result.insert(i);
+      result.insert(data[i]);
   return result;
 }
 
@@ -55,14 +55,14 @@ string matrixToString(T **matrix, size_t rows, size_t cols) {
   return ss.str();
 }
 
-string graphToString(vector<int> *graph, int n) {
+string graphToString(const map<int, vector<int> > &graph) {
   stringstream ss;
-  for (int u = 0; u < n; u++) {
+  for (const auto &it : graph) {
+    int u = it.first;
     ss << u << ": ";
-    for (int v : graph[u])
+    for (int v : it.second)
       ss << v << " ";
-    if (u != n-1)
-      ss << endl;
+    ss << endl;
   }
   return ss.str();
 }
@@ -172,8 +172,8 @@ vector<vector<set<T> > > exactSetCover(set<T> to_cover, vector<set<T> > subsets)
   return result;
 }
 
-bool isTree(int start, const vector<int> *graph, bool *visited, int n) {
-  visited[start] = true;
+bool isTree(int start, const map<int, vector<int> > &graph, set<int> &visited) {
+  visited.insert(start);
 
   vector<int> the_stack;
   the_stack.push_back(start);
@@ -188,13 +188,13 @@ bool isTree(int start, const vector<int> *graph, bool *visited, int n) {
 
     // Note: double counting edges, need to half later.
     nodes_visited++;
-    edges_visited += graph[u].size();
+    edges_visited += graph.at(u).size();
 
     // Visit neighbors.
-    for (int v : graph[u]) {
-      if (visited[v])
+    for (int v : graph.at(u)) {
+      if (visited.find(v) != visited.end())
         continue;
-      visited[v] = true;
+      visited.insert(v);
       the_stack.push_back(v);
     }
   }
@@ -204,20 +204,20 @@ bool isTree(int start, const vector<int> *graph, bool *visited, int n) {
   return (edges_visited == (nodes_visited - 1));
 }
 
-bool isForest(const vector<int> *graph, int n) {
-  bool *visited = new bool[n];
-  for (int i = 0; i < n; i++)
-    visited[i] = false;
-  for (int u = 0; u < n; u++)
-    if (!visited[u] && !isTree(u, graph, visited, n))
+bool isForest(const map<int, vector<int> > &graph) {
+  set<int> visited;
+  for (const auto &it : graph) {
+    int u = it.first;
+    if (visited.find(u) == visited.end() && !isTree(u, graph, visited))
       return false;
+  }
   return true;
 }
 
 bool isConnected(const set<int> &lower, const set<int> &upper,
-                 const vector<int> *graph, int n) {
-  for (int i = 0; i < n; i++) {
-    const vector<int> &can_reach = graph[i];
+                 const map<int, vector<int> > &graph) {
+  for (const auto &it : graph) {
+    const vector<int> &can_reach = it.second;
     for (int j = 0; j < can_reach.size(); j++) {
       for (int k = j+1; k < can_reach.size(); k++) {
         int u = can_reach[j];
@@ -232,37 +232,39 @@ bool isConnected(const set<int> &lower, const set<int> &upper,
   return false;
 }
 
-void dfs(int u, bool *visited, const vector<int> *graph) {
-  visited[u] = true;
-  for (int v : graph[u]) {
-    if (!visited[v])
-      dfs(v, visited, graph);
+void dfs(int u, set<int> &visited, const map<int, vector<int> > &graph,
+         vector<int> & component) {
+  visited.insert(u);
+  component.push_back(u);
+  for (int v : graph.at(u)) {
+    if (visited.find(v) == visited.end())
+      dfs(v, visited, graph, component);
   }
 }
 
-int numberConnectedComponents(const vector<int> *graph, int n) {
-  bool *visited = new bool[n];
-  for (int i = 0; i < n; i++)
-    visited[i] = false;
-  int result = 0;
-  for (int u = 0; u < n; u++) {
-    if (!visited[u]) {
-      result++;
-      dfs(u, visited, graph);
+vector<vector<int> > getConnectedComponents(const map<int, vector<int> > &graph) {
+  set<int> visited;
+  vector<vector<int> > result;
+  for (const auto &it : graph) {
+    int u = it.first;
+    if (visited.find(u) == visited.end()) {
+      vector<int> component;
+      dfs(u, visited, graph, component);
+      if (component.size() > 0)
+        result.push_back(component);
     }
   }
   return result;
 }
 
-vector<set<int> > getCorrespondingUpper(const vector<set<int> > &tile,
-                                        const set<int> &upper,
-                                        const set<int> &lower) {
+vector<set<int> > getCorrespondingUpper(const set<int> &upper,
+                                        const vector<vector<int> > &components) {
   vector<set<int> > result;
-  for (const set<int> &component : tile) {
+  for (const vector<int> &component : components) {
     set<int> component_upper;
     for (int contour : component) {
       if (upper.find(contour) != upper.end())
-        component_upper.insert(contour - lower.size());
+        component_upper.insert(contour);
     }
     if (component_upper.size() > 0)
       result.push_back(component_upper);
@@ -285,7 +287,7 @@ vector<set<int> > generateInitialRequirements(int number_contours) {
   return result;
 }
 
-void generateTopAndBottom(int bot_count, int top_count,
+void generateTopAndBottom(int bot_count, int top_count, int offset,
                           set<int> &bot_ids, set<int> &top_ids,
                           set<int> &both) {
   bot_ids.clear();
@@ -293,15 +295,15 @@ void generateTopAndBottom(int bot_count, int top_count,
   both.clear();
 
   // Bottom ids go from [0, bot_count).
-  int current = 0;
-  while (current < bot_count) {
+  int current = offset;
+  for (int i = 0; i < bot_count; i++) {
     both.insert(current);
     bot_ids.insert(current);
     current++;
   }
 
   // Top ids go from [bot_count, bot_count + top_count).
-  while (current < bot_count + top_count) {
+  for (int i = 0; i < top_count; i++) {
     both.insert(current);
     top_ids.insert(current);
     current++;
@@ -314,11 +316,13 @@ void generateTopAndBottom(int bot_count, int top_count,
 // - 12 cannot exist in the same subset, reject all of the form *11*.
 //
 // Current runtime is exponential.
-vector<set<int> > generatePossibleSubsets(unsigned int total,
+vector<set<int> > generatePossibleSubsets(const set<int> &entire_set,
                                           const vector<set<int> > &previous) {
+  vector<int> entire_set_vector(entire_set.begin(), entire_set.end());
+  int total = entire_set.size();
   vector<set<int> > possible;
   for (unsigned int counter = 1; counter < (2 << total); counter++) {
-    // Optimization 1: Use a single element.
+    // Optimization 1: Ignore single elements.
     if (isPowerOfTwo(counter))
       continue;
 
@@ -340,7 +344,7 @@ vector<set<int> > generatePossibleSubsets(unsigned int total,
     }
 
     if (can_use)
-      possible.push_back(setRepresentation(counter, total));
+      possible.push_back(setRepresentation(counter, total, entire_set_vector));
   }
   return possible;
 }
@@ -349,12 +353,11 @@ bool isValidTiling(const vector<set<int> > &tile,
                    const set<int> &lower,
                    const set<int> &upper,
                    const vector<set<int> > &previous,
-                   bool is_last) {
-  int n = lower.size() + upper.size() + tile.size() + previous.size();
-  vector<int> *graph = new vector<int>[n];
+                   bool is_last, vector<vector<int> > &connectedComponents) {
+  map<int, vector<int> > graph;
 
   // Add edges from previous connected components.
-  int dummy_node = (lower.size() + upper.size());
+  int dummy_node = *upper.rbegin() + 1;
   for (const set<int> &connected : previous) {
     for (int u : connected) {
       graph[u].push_back(dummy_node);
@@ -372,13 +375,22 @@ bool isValidTiling(const vector<set<int> > &tile,
     dummy_node++;
   }
 
-  bool is_valid = true;
-  is_valid &= isForest(graph, n);
-  is_valid &= isConnected(lower, upper, graph, n);
-  is_valid &= (!is_last || (numberConnectedComponents(graph, n) == 1));
+  connectedComponents = getConnectedComponents(graph);
 
-  // Cleanup.
-  delete[] graph;
+  bool is_valid = true;
+  is_valid &= isForest(graph);
+  is_valid &= isConnected(lower, upper, graph);
+  is_valid &= (!is_last || (connectedComponents.size() == 1));
+
+  if (is_valid) {
+    // cout << "test: " << endl;
+    // for (auto x : tile) {
+    //   for (auto y : x)
+    //     cout << y << " ";
+    //   cout << endl;
+    // }
+    // cout << graphToString(graph) << endl;
+  }
 
   return is_valid;
 }
@@ -395,7 +407,7 @@ void generateTiles(const set<int> &lower, const set<int> &upper,
   size_t total_nodes = all_contours.size();
 
   // These are used to generate the set cover.
-  vector<set<int> > components = generatePossibleSubsets(total_nodes, previous);
+  vector<set<int> > components = generatePossibleSubsets(all_contours, previous);
 
   // Generate possible tilings.
   vector<vector<set<int> > > possible = exactSetCover(all_contours, components);
@@ -403,9 +415,10 @@ void generateTiles(const set<int> &lower, const set<int> &upper,
   // Go through all possible tilings and find ones with no loops.
   for (int i = 0; i < possible.size(); i++) {
     const vector<set<int> > &tile = possible[i];
-    if (isValidTiling(tile, lower, upper, previous, is_last)) {
+    vector<vector<int> > connected;
+    if (isValidTiling(tile, lower, upper, previous, is_last, connected)) {
       result.push_back(tile);
-      upper_used.push_back(getCorrespondingUpper(tile, upper, lower));
+      upper_used.push_back(getCorrespondingUpper(upper, connected));
     }
   }
 }

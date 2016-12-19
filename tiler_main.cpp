@@ -2,26 +2,33 @@
 #include <set>
 #include <vector>
 #include <iostream>
+#include <cstdlib>
 
 #include "Tiler.h"
 
 using namespace std;
+using namespace Tiler;
 
 // Number of contours on top and bottom.
-const unsigned int COUNTS[] = {1, 3, 2};
-const unsigned int NUMBER_LEVELS = 3;
+const unsigned int COUNTS[] = {1, 2, 2, 1};
+const unsigned int NUMBER_LEVELS = 4;
 
 // Holds possible configurations from index 1 and on.
 vector<vector<set<int> > > result[NUMBER_LEVELS];
+// vector<Tile> result[NUMBER_LEVELS];
 
 // Holds what components are connected for the corresponding result.
 vector<vector<set<int> > > previous_connected[NUMBER_LEVELS];
 
 map<int, int> generated_from[NUMBER_LEVELS];
 
+int TO_SHOW = 5;
+
 int main() {
   // Seed the initial previous connected components.
   previous_connected[0].push_back(Tiler::generateInitialRequirements(COUNTS[0]));
+
+  int offset = 0;
 
   for (int i = 1; i < NUMBER_LEVELS; i++) {
     int lower_count = COUNTS[i-1];
@@ -31,7 +38,7 @@ int main() {
     set<int> lower;
     set<int> upper;
     set<int> all_contours;
-    Tiler::generateTopAndBottom(lower_count, upper_count,
+    Tiler::generateTopAndBottom(lower_count, upper_count, offset,
                                 lower, upper, all_contours);
 
     int tiles_generated = 0;
@@ -53,12 +60,13 @@ int main() {
         tiles_generated++;
       }
     }
+
+    offset += lower_count;
   }
 
-  int level = NUMBER_LEVELS - 1;
-  for (int i = result[level].size() - 10; i < result[level].size(); i++) {
-    int current = i;
-    int current_level = level;
+  for (int i = 0; i < TO_SHOW; i++) {
+    int current_level = NUMBER_LEVELS-1;
+    int current = rand() % result[current_level].size();
     while (current_level > 0) {
       cout << "level: " << current_level << endl;
       const vector<set<int> > &tile = result[current_level][current];
@@ -73,5 +81,5 @@ int main() {
     cout << endl;
   }
 
-  cout << result[level].size() << " total number of correct meshes. " << endl;
+  cout << "total number of correct meshes: " << result[NUMBER_LEVELS-1].size() << endl;
 }
