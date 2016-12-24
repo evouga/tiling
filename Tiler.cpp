@@ -67,6 +67,15 @@ string graphToString(const map<int, vector<int> > &graph) {
   return ss.str();
 }
 
+set<int> set_union(const set<int> &S, const set<int> &T) {
+  set<int> both;
+  for (int x : S)
+    both.insert(x);
+  for (int x : T)
+    both.insert(x);
+  return both;
+}
+
 void exactSetCoverUtility(bool **A, size_t n, size_t m,
                           set<uint> &deleted_rows, set<uint> &deleted_cols,
                           set<uint> &used, set<set<uint> > &set_covers) {
@@ -208,28 +217,29 @@ bool isForest(const map<int, vector<int> > &graph) {
   set<int> visited;
   for (const auto &it : graph) {
     int u = it.first;
-    if (visited.find(u) == visited.end() && !isTree(u, graph, visited))
+    if (visited.find(u) != visited.end())
+     continue;
+    else if (!isTree(u, graph, visited))
       return false;
   }
   return true;
 }
 
-bool isConnected(const set<int> &lower, const set<int> &upper,
-                 const map<int, vector<int> > &graph) {
-  for (const auto &it : graph) {
-    const vector<int> &can_reach = it.second;
-    for (int j = 0; j < can_reach.size(); j++) {
-      for (int k = j+1; k < can_reach.size(); k++) {
-        int u = can_reach[j];
-        int v = can_reach[k];
-        bool u_lower = (lower.find(u) != lower.end());
-        bool v_lower = (lower.find(v) != lower.end());
-        if (u_lower ^ v_lower)
-          return true;
+bool isConnected(const set<int> &upper, const set<int> &lower,
+                 const vector<vector<int> > &connectedComponents) {
+  for (int u : lower) {
+    for (const vector<int> &component : connectedComponents) {
+      if (find(component.begin(), component.end(), u) != component.end()) {
+        bool valid = false;
+        for (int v : component)
+          valid |= (upper.find(v) != upper.end());
+        if (!valid)
+          return false;
+        break;
       }
     }
   }
-  return false;
+  return true;
 }
 
 void dfs(int u, set<int> &visited, const map<int, vector<int> > &graph,
@@ -255,59 +265,6 @@ vector<vector<int> > getConnectedComponents(const map<int, vector<int> > &graph)
     }
   }
   return result;
-}
-
-vector<set<int> > getCorrespondingUpper(const set<int> &upper,
-                                        const vector<vector<int> > &components) {
-  vector<set<int> > result;
-  for (const vector<int> &component : components) {
-    set<int> component_upper;
-    for (int contour : component) {
-      if (upper.find(contour) != upper.end())
-        component_upper.insert(contour);
-    }
-    if (component_upper.size() > 0)
-      result.push_back(component_upper);
-  }
-  return result;
-}
-
-
-} // anonymous namespace
-
-namespace Tiler {
-
-vector<set<int> > generateInitialRequirements(int number_contours) {
-  vector<set<int> > result;
-  for (int i = 0; i < number_contours; i++) {
-    set<int> tmp;
-    tmp.insert(i);
-    result.push_back(tmp);
-  }
-  return result;
-}
-
-void generateTopAndBottom(int bot_count, int top_count, int offset,
-                          set<int> &bot_ids, set<int> &top_ids,
-                          set<int> &both) {
-  bot_ids.clear();
-  top_ids.clear();
-  both.clear();
-
-  // Bottom ids go from [0, bot_count).
-  int current = offset;
-  for (int i = 0; i < bot_count; i++) {
-    both.insert(current);
-    bot_ids.insert(current);
-    current++;
-  }
-
-  // Top ids go from [bot_count, bot_count + top_count).
-  for (int i = 0; i < top_count; i++) {
-    both.insert(current);
-    top_ids.insert(current);
-    current++;
-  }
 }
 
 // The following optimizations can be done if the inputs are (0, 12, 3).
@@ -349,16 +306,93 @@ vector<set<int> > generatePossibleSubsets(const set<int> &entire_set,
   return possible;
 }
 
-bool isValidTiling(const vector<set<int> > &tile,
-                   const set<int> &lower,
-                   const set<int> &upper,
-                   const vector<set<int> > &previous,
-                   bool is_last, vector<vector<int> > &connectedComponents) {
-  map<int, vector<int> > graph;
+} // anonymous namespace
 
-  // Add edges from previous connected components.
-  int dummy_node = *upper.rbegin() + 1;
-  for (const set<int> &connected : previous) {
+namespace Tiler {
+
+Tile::Tile(const set<int> &upper_contours) : 
+    bottom_parent(NULL), upper(upper_contours) {
+  for (int x : upper_contours) {
+    set<int> component;
+    component.insert(x);
+    this->components.push_back(new Component(component));
+  }
+}
+
+Tile::Tile(const set<int> &upper_contours, const vector<set<int> > &components,
+           const Tile *parent) : 
+    bottom_parent(parent),
+    upper(upper_contours) {
+  for (const set<int> &contours : components)
+    this->components.push_back(new Component(contours));
+}
+
+vector<set<int> > Tile::getUpperConnected() const {
+  vector<set<int> > result;
+  for (const Component *component : this->components) {
+    set<int> component_upper;
+    for (int contour : component->contours_used) {
+      if (this->upper.find(contour) != this->upper.end())
+        component_upper.insert(contour);
+    }
+    if (component_upper.size() > 0)
+      result.push_back(component_upper);
+  }
+  return result;
+}
+
+ostream& operator<< (ostream &os, const Component &comp) {
+  for (int x : comp.contours_used)
+    os << x << " ";
+  return os;
+}
+
+ostream& operator<< (ostream &os, const Tile &tile) {
+  os << tile.components.size() << " connected components covering - ";
+  for (int x : tile.upper)
+    os << x << " ";
+  os << endl;
+  for (int i = 0; i < tile.components.size(); i++) {
+    os << *tile.components[i];
+    if (i != (tile.components.size() - 1))
+      os << endl;
+  }
+  if (tile.bottom_parent != NULL)
+    return os << endl << *tile.bottom_parent;
+  return os;
+}
+
+bool Tile::isValid() const {
+  if (this->bottom_parent == NULL)
+    return true;
+
+  map<int, vector<int> > graph;
+  const Tile* parent = this->bottom_parent;
+
+  // Add new edges from components in tile.
+  // 1*** means connected in the current layer.
+  int dummy_node = 1000;
+  for (const Component *component : this->components) {
+    if (component->contours_used.size() == 1) {
+      int x = *component->contours_used.begin();
+      if (parent->upper.find(x) != parent->upper.end()) {
+        graph[x] = vector<int>();
+        continue;
+      }
+    }
+
+    for (int u : component->contours_used) {
+      graph[u].push_back(dummy_node);
+      graph[dummy_node].push_back(u);
+    }
+    dummy_node++;
+  }
+
+  // 2*** means at one point connected.
+  dummy_node = 2000;
+  for (set<int> connected : this->bottom_parent->getUpperConnected()) {
+    if (connected.size() == 1)
+      continue;
     for (int u : connected) {
       graph[u].push_back(dummy_node);
       graph[dummy_node].push_back(u);
@@ -366,61 +400,57 @@ bool isValidTiling(const vector<set<int> > &tile,
     dummy_node++;
   }
 
-  // Add new edges from components in tile.
-  for (const set<int> &component : tile) {
-    for (int u : component) {
-      graph[u].push_back(dummy_node);
-      graph[dummy_node].push_back(u);
-    }
-    dummy_node++;
-  }
-
-  connectedComponents = getConnectedComponents(graph);
+  vector<vector<int> > connectedComponents = getConnectedComponents(graph);
 
   bool is_valid = true;
   is_valid &= isForest(graph);
-  is_valid &= isConnected(lower, upper, graph);
-  is_valid &= (!is_last || (connectedComponents.size() == 1));
+  is_valid &= isConnected(this->upper, bottom_parent->upper, connectedComponents);
+  is_valid &= (!this->isLast || (connectedComponents.size() == 1));
 
-  if (is_valid) {
-    // cout << "test: " << endl;
-    // for (auto x : tile) {
-    //   for (auto y : x)
-    //     cout << y << " ";
-    //   cout << endl;
-    // }
-    // cout << graphToString(graph) << endl;
-  }
+  // cout << "graph: " << endl;
+  // cout << graphToString(graph) << endl;
 
   return is_valid;
 }
 
-void generateTiles(const set<int> &lower, const set<int> &upper,
-                   const set<int> &all_contours,
-                   const vector<set<int> > &previous,
-                   vector<vector<set<int> > > &result,
-                   vector<vector<set<int> > > &upper_used,
-                   bool is_last) {
-  result.clear();
-  upper_used.clear();
+Tile::~Tile() {
+  for (Component* comp : this->components)
+    delete comp;
+}
 
-  size_t total_nodes = all_contours.size();
+vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
+                            bool isLast) {
+  vector<Tile*> result;
+
+  // Bottom tile.
+  if (parent == NULL) {
+    result.push_back(new Tile(upper));
+    return result;
+  }
+
+  // Contours to cover.
+  set<int> all_contours = set_union(upper, parent->upper);
 
   // These are used to generate the set cover.
+  vector<set<int> > previous = parent->getUpperConnected();
   vector<set<int> > components = generatePossibleSubsets(all_contours, previous);
 
   // Generate possible tilings.
   vector<vector<set<int> > > possible = exactSetCover(all_contours, components);
 
   // Go through all possible tilings and find ones with no loops.
-  for (int i = 0; i < possible.size(); i++) {
-    const vector<set<int> > &tile = possible[i];
-    vector<vector<int> > connected;
-    if (isValidTiling(tile, lower, upper, previous, is_last, connected)) {
+  for (const vector<set<int> > &tiling : possible) {
+    Tile *tile = new Tile(upper, tiling, parent);
+    tile->isLast = isLast;
+
+    // Get rid of the tile if it's no good.
+    if (tile->isValid())
       result.push_back(tile);
-      upper_used.push_back(getCorrespondingUpper(upper, connected));
-    }
+    else
+      delete tile;
   }
+
+  return result;
 }
 
-} // namespace Tiler
+} // Namespace Tiler

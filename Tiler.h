@@ -14,96 +14,57 @@
 
 namespace Tiler {
 
-// struct Component {
-//   const set<int> &contours_used;
-// };
-//
-// // A tile is a set of components that cover all top and bottom contours.
-// struct Tile {
-//   vector<Component> components;
-//   const Tile *parent;
-// };
+// Consists of one to many contours.
+struct Component {
+  const std::set<int> contours_used;
 
-/**
- * Each contour is in its own connected component for the first slice.
- *
- * Arguments:
- *  @param number_contours - number of contours on the first slice.
- *
- * Returns:
- *  vector of subsets with a single element.
- */
-std::vector<std::set<int> > generateInitialRequirements(int number_contours);
+  Component(const std::set<int> contours) : contours_used(contours) { }
+};
 
-/**
- * Returns the top ids and bottom ids of contours.
- *
- * Arguments:
- *  @param bot_count - number of contours on the bot slice.
- *  @param top_count - number of contours on the top slice.
- *  @param offset - id to start at.
- *  @param bot_ids - the ids of contours on the bot slice.
- *  @param top_ids - the ids of contours on the top slice.
- *  @param both - the ids of of both contours.
- */
-void generateTopAndBottom(int bot_count, int top_count, int offset,
-                          std::set<int> &bot_ids, std::set<int> &top_ids,
-                          std::set<int> &both);
+// A tile is a set of components that cover all upper and lower contours.
+struct Tile {
+  // The tile that comes right before the current one.
+  const Tile *bottom_parent;
 
-/**
- * Returns all possible subsets.
- *
- * Arguments:
- *  @param total - total number of elements.
- *
- * Returns:
- *  vector of unique subsets.
- */
-std::vector<std::set<int> > generatePossibleSubsets(unsigned int total,
-                                                    const std::vector<std::set<int> > &previous);
+  // TODO(bradyz): Needs a fixup.
+  bool isLast = false;
 
-/**
- * Returns if a tiling is valid.
- *
- * This means no loops in the tiling and the previous connected components.
- *
- * Arguments:
- *  @param tile - components used in the tiling.
- *  @param lower - bottom contours to cover.
- *  @param upper - top contours to cover.
- *  @param previous - which components are connected previously.
- *  @param is_last - requires all top components to be connected.
- *  @param connectedComponents - used for generating next connected.
- *
- * Returns:
- *  vector of genus 0 tilings.
- */
-bool isValidTiling(const std::vector<std::set<int> > &tile,
-                   const std::set<int> &lower,
-                   const std::set<int> &upper,
-                   const std::vector<std::set<int> > &previous,
-                   bool is_last,
-                   std::vector<std::vector<int> > &connectedComponents);
+  // Contours to tile.
+  const std::set<int> upper;
+
+  // Configuration of connections between contours and parent.
+  std::vector<Component*> components;
+
+  // First tile constructor.
+  Tile(const std::set<int> &upper_contours);
+
+  // Tile with parent constructor.
+  Tile(const std::set<int> &upper_contours,
+       const std::vector<std::set<int> > &components,
+       const Tile *parent);
+
+  bool isTopTile() { return this->isLast; }
+  bool isValid() const;
+
+  // TODO(bradyz): get rid of this function.
+  std::vector<std::set<int> > getUpperConnected() const;
+
+  ~Tile();
+};
+
+// Ostream overloads for debugging.
+std::ostream& operator<< (std::ostream &os, const Component &comp);
+std::ostream& operator<< (std::ostream &os, const Tile &tile);
 
 /**
  * Populates all valid configurations of connections..
  *
  * Arguments:
- *  @param lower - bottom contours.
- *  @param upper - top contours.
- *  @param all_contours - contours to cover.
- *  @param previous - which components are connected previously.
- *  @param tilings - vector of genus 0 tilings.
- *  @param upper_used - vector of corresponding top pieces.
- *  @param is_last - denotes whether this is the last tile.
+ *  @param upper - upper contours to be covered.
+ *  @param parent - can be NULL, the tile below.
  */
-void generateTiles(const std::set<int> &lower,
-                   const std::set<int> &upper,
-                   const std::set<int> &all_contours,
-                   const std::vector<std::set<int> > &previous,
-                   std::vector<std::vector<std::set<int> > > &tilings,
-                   std::vector<std::vector<std::set<int> > > &upper_used,
-                   bool is_last);
+std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
+                                 bool isLast);
 
 } // namespace Tiler
 

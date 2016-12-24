@@ -10,76 +10,38 @@ using namespace std;
 using namespace Tiler;
 
 // Number of contours on top and bottom.
-const unsigned int COUNTS[] = {1, 2, 2, 1};
 const unsigned int NUMBER_LEVELS = 4;
+const unsigned int COUNTS[NUMBER_LEVELS] = {1, 2, 2, 1};
 
 // Holds possible configurations from index 1 and on.
-vector<vector<set<int> > > result[NUMBER_LEVELS];
-// vector<Tile> result[NUMBER_LEVELS];
+vector<Tile*> generated[NUMBER_LEVELS];
 
-// Holds what components are connected for the corresponding result.
-vector<vector<set<int> > > previous_connected[NUMBER_LEVELS];
-
-map<int, int> generated_from[NUMBER_LEVELS];
-
-int TO_SHOW = 5;
+// Generates contour ids.
+int total = 0;
 
 int main() {
-  // Seed the initial previous connected components.
-  previous_connected[0].push_back(Tiler::generateInitialRequirements(COUNTS[0]));
+  vector<Tile*> previous_layer;
 
-  int offset = 0;
-
-  for (int i = 1; i < NUMBER_LEVELS; i++) {
-    int lower_count = COUNTS[i-1];
-    int upper_count = COUNTS[i];
-    int total = lower_count + upper_count;
-
-    set<int> lower;
+  for (int i = 0; i < NUMBER_LEVELS; i++) {
     set<int> upper;
-    set<int> all_contours;
-    Tiler::generateTopAndBottom(lower_count, upper_count, offset,
-                                lower, upper, all_contours);
+    for (int j = 0; j < COUNTS[i]; j++)
+      upper.insert(total++);
 
-    int tiles_generated = 0;
-    for (int j = 0; j < previous_connected[i-1].size(); j++) {
-      const vector<set<int> > &connected = previous_connected[i-1][j];
-      // A tiling is a set of connected components that cover all contours.
-      vector<vector<set<int> > > tilings;
-      vector<vector<set<int> > > tilings_upper;
-      Tiler::generateTiles(lower, upper, all_contours, connected,
-                           tilings, tilings_upper, (i == (NUMBER_LEVELS - 1)));
-
-      for (int k = 0; k < tilings.size(); k++) {
-        const vector<set<int> > &tile = tilings[k];
-        const vector<set<int> > &tile_upper = tilings_upper[k];
-
-        generated_from[i][tiles_generated] = j;
-        result[i].push_back(tile);
-        previous_connected[i].push_back(tile_upper);
-        tiles_generated++;
-      }
+    if (i == 0) {
+      generated[0].push_back(new Tile(upper));
+      continue;
     }
 
-    offset += lower_count;
-  }
-
-  for (int i = 0; i < TO_SHOW; i++) {
-    int current_level = NUMBER_LEVELS-1;
-    int current = rand() % result[current_level].size();
-    while (current_level > 0) {
-      cout << "level: " << current_level << endl;
-      const vector<set<int> > &tile = result[current_level][current];
-      for (const set<int> &component : tile) {
-        for (int x : component)
-          cout << x << " ";
-        cout << endl;
-      }
-      current = generated_from[current_level][current];
-      current_level--;
+    for (Tile *parent : generated[i-1]) {
+      bool last = (i == NUMBER_LEVELS - 1);
+      for (Tile *upper_tile : Tiler::generateTiles(upper, parent, last))
+        generated[i].push_back(upper_tile);
     }
-    cout << endl;
   }
 
-  cout << "total number of correct meshes: " << result[NUMBER_LEVELS-1].size() << endl;
+  for (int i = 0; i < NUMBER_LEVELS; i++)
+    cout << "Level " << i << ": " << generated[i].size() << endl;
+
+  cout << endl << "Sample full tile stack top to bottom - " << endl;
+  cout << *generated[NUMBER_LEVELS-1][0] << endl;
 }

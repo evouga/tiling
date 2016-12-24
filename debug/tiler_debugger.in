@@ -1,0 +1,28 @@
+4       // Total number of contour levels.
+5       //      Contour ids covered in tile.
+2       //      Number of connected components.
+3 5     //          Contour ids in component.
+4       //          Contour ids in component.
+4 3     //      Contour ids covered in tile.
+2       //      Number of connected components.
+1 3     //          Contour ids in component.
+2 4     //          Contour ids in component.
+1 2     //      Contour ids covered in tile.
+2       //      Number of connected components.
+0 1     //          Contour ids in component.
+2       //          Contour ids in component.
+0       //      Contour ids covered in tile.
+1       //      Number of connected components
+0       //          Contour ids in component.
+
+The tile stack looks something like the following -
+
+        5
+       /
+      3   4
+      |   |
+      1   2
+       \
+        0
+
+and is not valid, as shown in the runner.

@@ -96,3 +96,7 @@ target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${
 # Dynamic programming for correct topologies.
 add_executable(tiler_main tiler_main.cpp Tiler.cpp)
 
+# Debugging runner for tiler_main (enter in tile stacks and check if valid).
+# From the build directory -
+#   $ make -j3 tiler_debugger && ./tiler_debugger < ../debug/tiler_debugger.in
+add_executable(tiler_debugger debug/tiler_debugger.cpp Tiler.cpp)
