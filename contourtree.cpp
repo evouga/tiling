@@ -33,7 +33,7 @@ int getTets(const char* fn_t, Eigen::MatrixXi &T) {
     tets_v.push_back(verts);
   }
   fclose(inf_t);
-  printf("Found %d tets\n", tets_v.size());
+  printf("Found %lu tets\n", tets_v.size());
 
   // Construct the eigen matrix
   T.resize(tets_v.size(), 4);
@@ -68,7 +68,7 @@ int getOrig(const char* fn, const char* printf_str, E &O, T dummy) {
   }
   fclose(inf);
 
-  printf("Found %d elements\n", orig.size());
+  printf("Found %lu elements\n", orig.size());
   O.resize(orig.size());
   for (int i = 0; i < orig.size(); ++i) {
     O(i) = orig[i];
@@ -90,12 +90,12 @@ int getHeats(const char* fn_h, Eigen::VectorXd &H) {
   std::vector<double> heats_v;
   while((read = getline(&line, &len, inf_h)) != -1) {
     double val;
-    sscanf(line, "%lf", val);
+    sscanf(line, "%lf", &val);
     heats_v.push_back(val);
   }
   fclose(inf_h);
 
-  printf("Found %d heat elements\n", heats_v.size());
+  printf("Found %lu heat elements\n", heats_v.size());
   H.resize(heats_v.size());
   for (int i = 0; i < heats_v.size(); ++i) {
     H(i) = heats_v[i];
@@ -129,5 +129,8 @@ int main() {
   v.data.set_mesh(V, F);
   v.launch();
 
-  TilingUtils::allPossibleTiles(V,F,T,O, H);
+  std::vector<TilingUtils::ConnectedComponent> comps = 
+      TilingUtils::allPossibleTiles(V,F,T,O, H);
+
+  // Use dancing links.
 }

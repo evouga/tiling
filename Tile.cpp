@@ -188,7 +188,7 @@ void Tile::triangulateSlices(double areaBound,
                              Eigen::MatrixXd &topV, Eigen::MatrixXi &topF,
                              Eigen::VectorXi &botO, Eigen::VectorXi &topO) {
 #ifdef ZSCALE_HACK
-  double thickness = 0.25;
+  double thickness = 0.4;
   // thickness = (botverts.colwise().maxCoeff() - botverts.colwise().minCoeff()).maxCoeff();
   printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
          __FILE__, __LINE__, thickness, bottom_.thickness);

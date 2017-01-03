@@ -12,6 +12,7 @@ struct ConnectedComponent {
   Eigen::MatrixXd V;  // vertices
   Eigen::MatrixXi F;  // faces
   Eigen::VectorXi O;  // original?
+  std::set<int> contours_used;
 
   double offsetVal;
 

@@ -102,7 +102,7 @@ void outputTree(ctBranch* b, tourtre_data* tdat, vector<int> &nodes,
   if ( (tdat->_H(b->saddle) > 0 && tdat->_H(b->saddle) < 1)) {
     unique_offsets.insert(tdat->_H(b->extremum));
     unique_offsets.insert(tdat->_H(b->saddle));
-    printf("(%d:%f %d:%f)\n", b->extremum, tdat->_H(b->extremum),
+    printf("(%zu:%f %zu:%f)\n", b->extremum, tdat->_H(b->extremum),
            b->saddle, tdat->_H(b->saddle));
   }
   nodes.push_back(b->extremum);
@@ -378,10 +378,12 @@ vector<ConnectedComponent> allPossibleTiles(
                                                                    offsetF,
                                                                    offsetO,
                                                                    offset);
-    for (const ConnectedComponent &component : components) {
+    for (ConnectedComponent &component : components) {
       bool is_unique = true;
 
       set<int> used = getContoursUsed(component, contours, TV);
+      // Save this for later.
+      component.contours_used = used;
       for (set<int> &combination : contour_combinations)
         is_unique &= (used != combination);
 

@@ -242,29 +242,29 @@ void getOffsetSurface(
   }
 
   if (view) {
-  // Some debug stuff
-  igl::writeOFF("debug_tets.off", TV, TF);
-  // Now need to write the tets and heats as well
-  FILE* tet_of = fopen("debug_tets.txt", "w");
-  for (int i = 0; i < TT.rows(); ++i) {
-    for (int j = 0; j < TT.cols(); ++j) {
-      fprintf(tet_of, "%d ", TT(i, j));
+    // Some debug stuff
+    igl::writeOFF("debug_tets.off", TV, TF);
+    // Now need to write the tets and heats as well
+    FILE* tet_of = fopen("debug_tets.txt", "w");
+    for (int i = 0; i < TT.rows(); ++i) {
+      for (int j = 0; j < TT.cols(); ++j) {
+        fprintf(tet_of, "%d ", TT(i, j));
+      }
+      fprintf(tet_of, "\n");
     }
-    fprintf(tet_of, "\n");
-  }
-  fclose(tet_of);
-  // Heats
-  FILE* heat_of = fopen("debug_heats.txt", "w");
-  for (int i = 0; i < Z.rows(); ++i) {
-    fprintf(heat_of, "%lf\n", Z(i));
-  }
-  fclose(heat_of);
-  // Origs
-  FILE* orig_of = fopen("debug_orig.txt", "w");
-  for (int i = 0; i < TO.rows(); ++i) {
-    fprintf(orig_of, "%d\n", TO(i));
-  }
-  fclose(orig_of);
+    fclose(tet_of);
+    // Heats
+    FILE* heat_of = fopen("debug_heats.txt", "w");
+    for (int i = 0; i < Z.rows(); ++i) {
+      fprintf(heat_of, "%lf\n", Z(i));
+    }
+    fclose(heat_of);
+    // Origs
+    FILE* orig_of = fopen("debug_orig.txt", "w");
+    for (int i = 0; i < TO.rows(); ++i) {
+      fprintf(orig_of, "%d\n", TO(i));
+    }
+    fclose(orig_of);
   }
 
   /*
@@ -326,11 +326,15 @@ int main(int argc, char *argv[]) {
                    botverts, botfaces, botorig,
                    topverts, topfaces, toporig,
                    bV, bF, borig, all_allowed, all_allowed, true);
+  // Make sure this is consistent if they only ask for a single slice.
+  V = bV;
+  F = bF;
+  orig = borig;
 
   good_start++;
   int size = ss.getSizeAt(good_start);
   int num = 0;
-  while (size > 0 && num++ < num_slices) {
+  while (size > 0 && ++num < num_slices) {
     // Next time's bottom will be last time's top.
     botverts = topverts;
     botfaces = topfaces;
@@ -365,8 +369,19 @@ int main(int argc, char *argv[]) {
   Eigen::MatrixXd Vborder;
   Eigen::MatrixXi Fborder;
   Eigen::VectorXi Oborder;
-  fprintf(stderr, "Extracting shell...\n");
-  extractShell(V, F, orig, Vborder, Fborder, Oborder);
+  if (num > 1) {
+    fprintf(stderr, "Extracting shell...\n");
+    extractShell(V, F, orig, Vborder, Fborder, Oborder);
+  } else {
+    // If we only use a single thing, we need to take a little special extra care.
+    Vborder = V;
+    Fborder = F;
+    Oborder = orig;
+    extractShell(V, F, orig, Vborder, Fborder, Oborder);
+
+    fprintf(stderr, "Removing duplicate vertices (%lu verts)\n", Vborder.rows());
+    Helpers::removeDuplicates(Vborder, Fborder, Oborder);
+  }
   /*
   viewer.data.clear();
   viewer.data.set_mesh(Vborder, Fborder);
@@ -393,12 +408,12 @@ int main(int argc, char *argv[]) {
   }
   fclose(of);
 
-  printf("Written to output.\n");
+  printf("Written to output [both_slices.off] and [both_slices_orig.txt].\n");
   Eigen::MatrixXd Vcurve;
   //computeCurvatureFlow(V, F, orig, 0.1, Vcurve);
   //viewer.data.clear();
   //viewer.data.set_mesh(Vcurve, F);
   //viewer.launch();
   //biharmonic(V, F, orig, 0.1, Vcurve);
-  biharmonic(Vborder, Fborder, Oborder, Vcurve);
+  biharmonic_view(Vborder, Fborder, Oborder, Vcurve, false);
 }

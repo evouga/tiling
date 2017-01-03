@@ -470,7 +470,7 @@ void SliceStack::computeLaplace(int slice_no,
 	}
 	//Eigen::SparseMatrix<double> L = L_d.sparseView();//, L_known, L_others;
   if (laplace_DEBUG)
-    printf("done! Number non-zeros is %lu\n", L.nonZeros());
+    printf("done! Number non-zeros is %d\n", L.nonZeros());
 	
   if (laplace_DEBUG)
     printf("Solving energy constraints...");
