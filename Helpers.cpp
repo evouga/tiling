@@ -7,6 +7,7 @@
 #include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/remove_duplicates.h>
 #include <igl/triangle/triangulate.h>
+#include <igl/viewer/Viewer.h>
 
 using namespace std;
 
@@ -63,33 +64,38 @@ void tetrahedralize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   assert(V.rows() == VM.rows() && F.rows() == FM.rows());
 
   char buffer[80];
-  sprintf(buffer, "pq%fY", GLOBAL::TET_RATIO);
+  sprintf(buffer, "pq%fYQ", GLOBAL::TET_RATIO);
 
   igl::copyleft::tetgen::tetrahedralize(V, F, VM, FM, buffer, TV, TT, TF, TO);
 
-  if (GLOBAL::DEBUG) {
-    cout << "Tetrahedralized mesh." << endl;
-    cout << "F: " << F.rows() << " -> " << TF.rows() << endl;
-  }
-
   // Tetgen has some weird markers it introduces. Make them all either
   // original or nonoriginal.
-  for (int i = 0; i < TO.rows(); ++i) {
-    if (TO(i) != GLOBAL::original_marker) {
-      TO(i) = GLOBAL::nonoriginal_marker;
-    }
-  }
+  for (int i = 0; i < TO.rows(); ++i)
+    TO(i) = max(TO(i), GLOBAL::nonoriginal_marker);
 }
 
 void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
                  Eigen::MatrixXd &V, Eigen::MatrixXi &F) {
   char buffer[80];
-  sprintf(buffer, "DYa%fq", GLOBAL::TRI_AREA);
+  sprintf(buffer, "QDYa%fq", GLOBAL::TRI_AREA);
 
   // For holes, not used right now.
   Eigen::MatrixXd H_unused(0, 2);
 
   igl::triangle::triangulate(P, E, H_unused, buffer, V, F);
+}
+
+void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                 const Eigen::VectorXi &M) {
+  igl::viewer::Viewer v;
+  v.data.clear();
+  v.data.set_mesh(V, F);
+  v.data.set_face_based(true);
+  for (int i = 0; i < M.rows(); i++) {
+    if (M(i) != GLOBAL::nonoriginal_marker)
+      v.data.add_label(V.row(i), to_string(M(i)));
+  }
+  v.launch();
 }
 
 } // namespace Helpers

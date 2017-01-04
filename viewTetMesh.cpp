@@ -7,6 +7,7 @@
 #include <igl/viewer/Viewer.h>
 
 #include "offsetSurface.h"
+#include "glob_defs.h"
 
 // These need to be global, so they can be used in Viewer functions
 namespace {
@@ -18,6 +19,7 @@ namespace {
   Eigen::MatrixXi _TT; // tet tets (similar to triangles)
   Eigen::MatrixXi _TF; // tet faces
   Eigen::VectorXd _TC; // tet vertex values (will be cerated to colors)
+  Eigen::VectorXi _TM; // tet markers (contour ids).
   // For the offset surfaces
   Eigen::MatrixXd _OFF_V;
   Eigen::MatrixXi _OFF_F;
@@ -54,7 +56,7 @@ namespace {
       F_temp.row(i*4+2) << (i*4)+3, (i*4)+2, (i*4)+0;
       F_temp.row(i*4+3) << (i*4)+1, (i*4)+2, (i*4)+3;
     }
-    
+
     // Set the viewer data.
     viewer.data.clear();
     viewer.data.set_mesh(V_temp,F_temp);
@@ -106,8 +108,7 @@ namespace {
       F_temp.row(i*4+2) << (i*4)+3, (i*4)+2, (i*4)+0;
       F_temp.row(i*4+3) << (i*4)+1, (i*4)+2, (i*4)+3;
     }
-    
-    igl::writeOFF("viewer.off", V_temp, F_temp);
+
     // Set the viewer data.
     viewer.data.clear();
     viewer.data.set_mesh(V_temp,F_temp);
@@ -116,6 +117,10 @@ namespace {
 			viewer.data.set_colors(C_temp);
       viewer.core.lighting_factor = 0;
 		}
+    for (int i = 0; i < _TM.rows(); i++) {
+      if (_TM(i) != GLOBAL::nonoriginal_marker)
+        viewer.data.add_label(_TV.row(i), std::to_string(_TM(i)));
+    }
   }
 
 // This function is called every time a keyboard button is pressed
@@ -149,16 +154,37 @@ void TetMeshViewer::viewTetMesh(const Eigen::MatrixXd &TV, const Eigen::MatrixXi
   viewer.launch();
 }
 
-void TetMeshViewer::viewTetMesh(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT, const Eigen::MatrixXi &TF,
-            const Eigen::VectorXd &TC, bool normalize_cols) {
+void TetMeshViewer::viewTetMesh(const Eigen::MatrixXd &TV,
+                                const Eigen::MatrixXi &TT,
+                                const Eigen::MatrixXi &TF,
+                                const Eigen::VectorXd &TC,
+                                bool normalize_cols) {
   _TV = TV;
   _TT = TT;
   _TF = TF;
   _TC = TC;
   igl::barycenter(_TV,_TT,_B);
-  
   igl::jet(TC, normalize_cols, _C);
-  
+
+  igl::viewer::Viewer viewer;
+  viewer.callback_key_down = &key_down_depth;
+  key_down_depth(viewer,'5',0);
+  viewer.launch();
+}
+
+void TetMeshViewer::viewTetMesh(const Eigen::MatrixXd &TV,
+                                const Eigen::MatrixXi &TT,
+                                const Eigen::MatrixXi &TF,
+                                const Eigen::VectorXi &TM,
+                                const Eigen::VectorXd &TC) {
+  _TV = TV;
+  _TT = TT;
+  _TF = TF;
+  _TC = TC;
+  _TM = TM;
+  igl::barycenter(_TV,_TT,_B);
+  igl::jet(TC, true, _C);
+
   igl::viewer::Viewer viewer;
   viewer.callback_key_down = &key_down_depth;
   key_down_depth(viewer,'5',0);

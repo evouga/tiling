@@ -94,7 +94,8 @@ add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_
 target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 # Dynamic programming for correct topologies.
-add_executable(tiler_main tiler_main.cpp Tiler.cpp)
+add_executable(tiler_main tiler_main.cpp Tiler.cpp ${SRCFILES})
+target_link_libraries(tiler_main ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})
 
 # Debugging runner for tiler_main (enter in tile stacks and check if valid).
 # From the build directory -

@@ -2,6 +2,7 @@
 #include <limits>
 #include <sstream>
 #include <stdlib.h>
+#include <vector>
 
 #include <igl/jet.h>
 #include <igl/triangle/triangulate.h>
@@ -77,8 +78,10 @@ void Tile::addOrig(const Slice &s,
       RowVector2i ed(offset + j, offset + prev);
       E.push_back(ed);
 
-      VM.push_back(GLOBAL::original_marker);
+      // The vertex will be marked by the contour id.
+      VM.push_back(s.contours[i].contour_id);
       EM.push_back(GLOBAL::original_marker);
+
       if (first) {
         lims(0, 0) = lims(0, 1) = pt(0);
         lims(1, 0) = lims(1, 1) = pt(1);
@@ -113,6 +116,23 @@ void flood_fill(const Eigen::MatrixXi &faces, Eigen::VectorXi &orig) {
   for (int i = 0; i < orig.rows(); ++i) {
     if (orig(i) == 0) {
       orig(i) = GLOBAL::original_marker;
+    }
+  }
+
+  dirty = true;
+  while(dirty) {
+    dirty = false;
+    for (int i = 0; i < faces.rows(); ++i) {
+      int marker = GLOBAL::nonoriginal_marker;
+      for (int j = 0; j < 3; j++)
+        marker = max(marker, orig(faces(i, j)));
+      for (int j = 0; j < 3; ++j) {
+        int vert = faces(i,j);
+        if (orig(vert) >= GLOBAL::original_marker && orig(vert) != marker) {
+          orig(vert) = marker;
+          dirty = true;
+        }
+      }
     }
   }
 }
@@ -166,8 +186,7 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
   cout << "Delaunay triangulating mesh with " << V.rows() << " verts" << endl;
 
   stringstream ss;
-  //ss << "Da" << GLOBAL::triangle_max_area << "q";
-  ss << "Da" << areaBound << "q";
+  ss << "QDa" << areaBound << "q";
 
   MatrixXd V2;
   igl::triangle::triangulate(V, E, H, VM, EM, ss.str().c_str(), V2, faces, orig);

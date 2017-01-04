@@ -64,7 +64,8 @@ class ContourVisitor : public XMLVisitor
 	const char *contourname;
 };
 
-Slice *readSlice(const char *filename, const char *objectname) {
+Slice *readSlice(const char *filename, const char *objectname)
+{
 	ContourVisitor cv(objectname);
 	XMLDocument doc;
 
@@ -83,22 +84,27 @@ Slice *readSlice(const char *filename, const char *objectname) {
 	return new Slice(cv.contours, thickness);
 }
 
-void readSlicesFromFolder(const char *baseFilename, const char *objectname, vector<Slice *> &slices)
-{
-	int curslice = 0;
+void readSlicesFromFolder(const char *baseFilename, const char *objectname, vector<Slice *> &slices) {
 	slices.clear();
-	while(true)
-	{
+	int curslice = 0;
+	while (true) {
 		stringstream ss;
 		ss << baseFilename;
 		ss << ".";
 		ss << curslice;
 		Slice *slice = NULL;
-		if( (slice = readSlice(ss.str().c_str(), objectname)) )
+		if ((slice = readSlice(ss.str().c_str(), objectname)))
 			slices.push_back(slice);
 		else
-			return;
+      break;
 		curslice++;
 	}
+  // Give all contours unique ids.
+  int contour_id = 10;
+  for (Slice *slice : slices)
+    for (Contour &contour : slice->contours)
+      contour.contour_id = contour_id++;
+  cout << "Slices: " << slices.size() << endl;
+  cout << "Contours: " << contour_id << endl;
 }
 

@@ -54,7 +54,7 @@ public:
 	// TO is a vector corresponding to the vertices, where 1 means it's original
 	// and 0 means it's not.
   // The output is Z, a vector that contains heat values for each vertex of TV.
-	void computeLaplace(int slice_no, const Eigen::MatrixXd &TV,
+	void computeLaplace(const Eigen::MatrixXd &TV,
 											const Eigen::MatrixXi &TT, const Eigen::MatrixXi &TF,
 											const Eigen::VectorXi &TO, Eigen::VectorXd &Z);
 

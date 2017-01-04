@@ -11,15 +11,15 @@ namespace TilingUtils {
 struct ConnectedComponent {
   Eigen::MatrixXd V;  // vertices
   Eigen::MatrixXi F;  // faces
-  Eigen::VectorXi O;  // original?
+  Eigen::VectorXi M;  // markers
 
   double offsetVal;
+  std::set<int> used;
 
   ConnectedComponent(double offset,
                      const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                     const std::set<int> &faces_used);
-
-  void render() const;
+                     const Eigen::VectorXi &M,
+                     const std::set<int> &vertices_used);
 };
 
 /**

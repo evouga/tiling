@@ -126,7 +126,7 @@ set<set<uint> > exactSetCover(const vector<uint> &subsets, uint m) {
     for (size_t j = 0; j < m; j++)
       matrix[i][j] = getNthBit(subsets[i], j);
   }
-  
+
   // Populated by utility function.
   set<set<uint> > set_covers;
   set<uint> rows_used;
@@ -310,7 +310,7 @@ vector<set<int> > generatePossibleSubsets(const set<int> &entire_set,
 
 namespace Tiler {
 
-Tile::Tile(const set<int> &upper_contours) : 
+Tile::Tile(const set<int> &upper_contours) :
     bottom_parent(NULL), upper(upper_contours) {
   for (int x : upper_contours) {
     set<int> component;
@@ -320,7 +320,7 @@ Tile::Tile(const set<int> &upper_contours) :
 }
 
 Tile::Tile(const set<int> &upper_contours, const vector<set<int> > &components,
-           const Tile *parent) : 
+           const Tile *parent) :
     bottom_parent(parent),
     upper(upper_contours) {
   for (const set<int> &contours : components)

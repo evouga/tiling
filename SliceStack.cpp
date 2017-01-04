@@ -400,13 +400,12 @@ void SliceStack::tetrahedralizeSlice (
   Helpers::tetrahedralize(V, F, M, FM, TV, TT, TF, TO);
 }
 
-void SliceStack::computeLaplace(int slice_no,
-                                const Eigen::MatrixXd &TV,
+void SliceStack::computeLaplace(const Eigen::MatrixXd &TV,
                                 const Eigen::MatrixXi &TT,
                                 const Eigen::MatrixXi &TF,
                                 const Eigen::VectorXi &TO,
                                 Eigen::VectorXd &Z) {
-  bool laplace_DEBUG = true;
+  bool laplace_DEBUG = false;
 
 	Eigen::IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
 	Eigen::IOFormat LongFmt(10, 0, ", ", "\n", "[", "]");
@@ -431,7 +430,7 @@ void SliceStack::computeLaplace(int slice_no,
 			known_c_v.push_back(0);
 		}
 		*/
-		if (TO(i) == GLOBAL::original_marker) {
+		if (TO(i) != GLOBAL::nonoriginal_marker) {
 			known_v.push_back(i);
 			known_c_v.push_back(GLOBAL::inside_temp);
 		} else if (TV(i,2) == mx(2) || TV(i,2) == mn(2)) {

@@ -1,6 +1,7 @@
 #include "offsetSurface.h"
 
 #include <vector>
+#include <map>
 
 #include <CGAL/Complex_2_in_triangulation_3.h>
 #include <CGAL/Implicit_surface_3.h>
@@ -195,6 +196,7 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
   Voff.resize(s.size() * 4, 3);
   Foff.resize(s.size() * 4, 3);
   Ooff.resize(s.size() * 4);
+
   for (unsigned i = 0; i < s.size(); ++i)
   {
     for (int j = 0; j < 4; ++j) {

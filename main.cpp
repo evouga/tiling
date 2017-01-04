@@ -199,7 +199,7 @@ void getOffsetSurface(
   cout << topverts.rows() << " verts on top face" << endl;
 
   Eigen::VectorXd Z;
-	ss.computeLaplace(bot_slice_no, TV, TT, TF, TO, Z);
+	ss.computeLaplace(TV, TT, TF, TO, Z);
   if (view) TetMeshViewer::viewTetMesh(TV, TT, TF, Z, true);
 
   //if (view) TetMeshViewer::viewOffsetSurface(TV, TF, TT, Z);

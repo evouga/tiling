@@ -18,7 +18,6 @@ public:
 		Eigen::VectorXi &bot_orig, Eigen::VectorXi &top_orig);
 
 private:
-	// Refactored triangualate to add getOrig function
 	void addOrig(const Slice &s,
               std::vector<Eigen::RowVector2d> &V,
               std::vector<Eigen::RowVector2i> &E,

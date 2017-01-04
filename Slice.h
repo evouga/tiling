@@ -7,6 +7,7 @@
 #include <vector>
 
 struct Contour {
+  int contour_id;
 	std::vector<double> x;
 	std::vector<double> y;
 };

@@ -9,6 +9,12 @@ void viewTetMesh(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT, const Eig
 void viewTetMesh(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT, const Eigen::MatrixXi &TF,
             const Eigen::VectorXd &TC, bool normalize_cols);
 
+void viewTetMesh(const Eigen::MatrixXd &TV,
+                                const Eigen::MatrixXi &TT,
+                                const Eigen::MatrixXi &TF,
+                                const Eigen::VectorXi &TM,
+                                const Eigen::VectorXd &TC);
+
 // Launch viewer to view offset surfaces
 void viewOffsetSurface(
     const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
