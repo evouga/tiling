@@ -14,7 +14,7 @@ struct ConnectedComponent {
   Eigen::VectorXi M;  // markers
 
   double offsetVal;
-  std::set<int> used;
+  std::set<int> contours_used;
 
   ConnectedComponent(double offset,
                      const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
