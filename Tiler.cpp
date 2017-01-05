@@ -341,6 +341,19 @@ vector<set<int> > Tile::getUpperConnected() const {
   return result;
 }
 
+vector<Component*> Tile::getAllComponents() const {
+  vector<Component*> result;
+
+  if (this->bottom_parent != NULL) {
+    result = this->bottom_parent->getAllComponents();
+
+    for (Component *component : this->components)
+      result.push_back(component);
+  }
+
+  return result;
+}
+
 ostream& operator<< (ostream &os, const Component &comp) {
   for (int x : comp.contours_used)
     os << x << " ";
@@ -434,6 +447,37 @@ vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
   // These are used to generate the set cover.
   vector<set<int> > previous = parent->getUpperConnected();
   vector<set<int> > components = generatePossibleSubsets(all_contours, previous);
+
+  // Generate possible tilings.
+  vector<vector<set<int> > > possible = exactSetCover(all_contours, components);
+
+  // Go through all possible tilings and find ones with no loops.
+  for (const vector<set<int> > &tiling : possible) {
+    Tile *tile = new Tile(upper, tiling, parent);
+    tile->isLast = isLast;
+
+    // Get rid of the tile if it's no good.
+    if (tile->isValid())
+      result.push_back(tile);
+    else
+      delete tile;
+  }
+
+  return result;
+}
+
+vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
+                            const vector<set<int> > &components, bool isLast) {
+  vector<Tile*> result;
+
+  // Bottom tile.
+  if (parent == NULL) {
+    result.push_back(new Tile(upper));
+    return result;
+  }
+
+  // Contours to cover.
+  set<int> all_contours = set_union(upper, parent->upper);
 
   // Generate possible tilings.
   vector<vector<set<int> > > possible = exactSetCover(all_contours, components);

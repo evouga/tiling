@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <cstdio>
+#include <set>
 
 #include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/remove_duplicates.h>
@@ -91,11 +92,61 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   v.data.clear();
   v.data.set_mesh(V, F);
   v.data.set_face_based(true);
+  
+  // Show only one marker for each contour.
+  set<int> used;
+
   for (int i = 0; i < M.rows(); i++) {
-    if (M(i) != GLOBAL::nonoriginal_marker)
+    if (M(i) != GLOBAL::nonoriginal_marker && used.find(M(i)) == used.end()) {
       v.data.add_label(V.row(i), to_string(M(i)));
+      used.insert(M(i));
+    }
   }
+
   v.launch();
+}
+
+void combineMesh(const vector<Eigen::MatrixXd> &Vs,
+                 const vector<Eigen::MatrixXi> &Fs,
+                 const vector<Eigen::VectorXi> &Ms,
+                 Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M) {
+  assert(Vs.size() == Fs.size());
+  assert(Vs.size() == Ms.size());
+
+  int total_vertices = 0;
+  int total_faces = 0;
+
+  for (const Eigen::MatrixXd &vertices : Vs)
+    total_vertices += vertices.rows();
+  for (const Eigen::MatrixXi &faces : Fs)
+    total_faces += faces.rows();
+
+  V.resize(total_vertices, 3);
+  F.resize(total_faces, 3);
+  M.resize(total_vertices);
+
+  int vertex_offset = 0;
+  int face_offset = 0;
+
+  for (int i = 0; i < Vs.size(); i++) {
+    const Eigen::MatrixXd &vertices = Vs[i];
+    const Eigen::MatrixXi &faces = Fs[i];
+    const Eigen::VectorXi &markers = Ms[i];
+
+    for (int j = 0; j < vertices.rows(); j++)
+      V.row(vertex_offset + j) = vertices.row(j);
+
+    for (int j = 0; j < faces.rows(); j++) {
+      for (int k = 0; k < 3; k++)
+        F(face_offset + j, k) = vertex_offset + faces(j, k);
+    }
+
+    for (int j = 0; j < markers.rows(); j++)
+      M(vertex_offset + j) = markers(j);
+
+    vertex_offset += vertices.rows();
+    face_offset += faces.rows();
+  }
 }
 
 } // namespace Helpers

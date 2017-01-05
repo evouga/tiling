@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <iostream>
+#include <set>
 
 #include <Eigen/Core>
 
@@ -59,6 +60,9 @@ public:
 											const Eigen::VectorXi &TO, Eigen::VectorXd &Z);
 
   int getSizeAt(int i);
+
+  std::set<int> getContoursAt(int i);
+
 
 private:
 	void flipNormal(Eigen::MatrixXi &f);

@@ -1,6 +1,8 @@
 #ifndef HELPERS_H
 #define HELPERS_H
 
+#include <vector>
+
 #include <Eigen/Core>
 
 namespace Helpers {
@@ -20,6 +22,11 @@ void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
 
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  const Eigen::VectorXi &M);
+
+void combineMesh(const std::vector<Eigen::MatrixXd> &Vs,
+                 const std::vector<Eigen::MatrixXi> &Fs,
+                 const std::vector<Eigen::VectorXi> &Ms,
+                 Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M);
 
 } // namespace Helpers
 

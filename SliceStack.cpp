@@ -1,6 +1,7 @@
 #include <vector>
 #include <limits>
 #include <algorithm>
+#include <set>
 
 #include <igl/colon.h>
 #include <igl/cotmatrix.h>
@@ -89,6 +90,13 @@ int SliceStack::getSizeAt(int i) {
   if (i > slices_.size())
     return -1;
   return slices_[i]->contours.size();
+}
+
+set<int> SliceStack::getContoursAt(int i) {
+  set<int> result;
+  for (const Contour& contour : this->slices_[i]->contours)
+    result.insert(contour.contour_id);
+  return result;
 }
 
 bool customSortByX(const Eigen::Vector3d a, const Eigen::Vector3d b) {
