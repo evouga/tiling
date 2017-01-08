@@ -7,9 +7,11 @@
 #include <igl/components.h>
 #include <igl/jet.h>
 #include <igl/viewer/Viewer.h>
-#include "offsetSurface.h"
-#include "glob_defs.h"
+
 #include "Helpers.h"
+#include "curvatureFlow.h"
+#include "glob_defs.h"
+#include "offsetSurface.h"
 #include "viewTetMesh.h"
 
 extern "C"
@@ -247,11 +249,6 @@ vector<ConnectedComponent> allPossibleTiles(
 
   // Go through all offsets and generate surfaces.
   for (double offset: unique_offsets) {
-    // TODO: fix this.
-    // There is a small offset that creates a crappy surface.
-    if (offset < 0.1)
-      continue;
-
     Eigen::MatrixXd offsetV;
     Eigen::MatrixXi offsetF;
     Eigen::VectorXi offsetO;
@@ -265,13 +262,30 @@ vector<ConnectedComponent> allPossibleTiles(
                                                                    offsetO,
                                                                    offset);
 
+    // Many components have similar topologies - pick the best.
     for (ConnectedComponent &component : components) {
-      bool is_unique = true;
-      for (const ConnectedComponent& unique_component : unique_components)
-        is_unique &= (component.contours_used != unique_component.contours_used);
+      int index = -1;
 
-      if (is_unique)
+      for (int i = 0; i < unique_components.size(); i++) {
+        if (unique_components[i].contours_used == component.contours_used)
+          index = i;
+      }
+
+      // If this is a new combination, used it.
+      if (index == -1) {
         unique_components.push_back(component);
+      }
+      else {
+        Eigen::MatrixXd unused;
+        const ConnectedComponent &contender = unique_components[index];
+
+        // Find the one with lower energy.
+        double e1 = biharmonic(component.V, component.F, component.M, unused);
+        double e2 = biharmonic(contender.V, contender.F, contender.M, unused);
+
+        if (e1 < e2)
+          unique_components[index] = component;
+      }
     }
   }
 

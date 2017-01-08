@@ -25,14 +25,14 @@ void convertVectorToIndices(const Eigen::VectorXi &orig,
   // b will contain all the boundary vertices.
   int num_orig = 0;
   for (int i = 0; i < orig.rows(); ++i) {
-    if (orig(i) == GLOBAL::original_marker) {
+    if (orig(i) != GLOBAL::nonoriginal_marker) {
       num_orig++;
     }
   }
   b.resize(num_orig);
   int orig_i = 0;
   for (int i = 0; i < orig.rows(); ++i) {
-    if (orig(i) == GLOBAL::original_marker) {
+    if (orig(i) != GLOBAL::nonoriginal_marker) {
       b(orig_i++) = i;
     }
   }
@@ -82,10 +82,10 @@ void removeInterior(const Eigen::MatrixXi &F, const Eigen::VectorXi &orig,
 }
 } // namespace
 
-void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                const Eigen::VectorXi &orig,
-                Eigen::MatrixXd &Vc, double change_val,
-                bool remove_interior) {
+double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                  const Eigen::VectorXi &orig,
+                  Eigen::MatrixXd &Vc, double change_val,
+                  bool remove_interior) {
   // First thing we need to do: remove interior vertices
   Eigen::VectorXi new_orig = orig;
   if (remove_interior) {
@@ -105,18 +105,18 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // Initialize Vc with input vertices V
   Vc = V;
 
-  double diff;
-  double prev_diff = 0;
+  double energy = -1.0;
+  double diff = 0.0;
+  double prev_diff = 0.0;
+  int counter = 0;
   do {
+    prev_diff = diff;
     // Recompute M, leave L alone.
     igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
-    //igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_VORONOI,M);
-    //igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_BARYCENTRIC,M);
 
     // How much should we change by?
     Eigen::MatrixXd D;
     igl::harmonic(L,M, b,V_bc, 2, D);
-    //igl::harmonic(Vc,F, b,V_bc, 2, D);
 
     // Calculate the difference.
     diff = 0;
@@ -124,17 +124,29 @@ void biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     for (int i = 0; i < V.rows(); ++i) {
       diff += (Vc.row(i) - D.row(i)).norm();
     }
-    //printf("Difference this round is %f\n", diff);
+    printf("Difference this round is %f\n", diff);
     
     // Update the values.
     Vc = D;
 
     // Calculate the energy.
-    //Eigen::SparseMatrix<double> Mi;
-    //igl::invert_diag(M,Mi);
-    //auto en = (Vc.transpose() * L * Mi * L * Vc).trace();
-    //std::cout << "Energy is " << en << std::endl;
-  } while (diff - prev_diff < change_val);
+    Eigen::SparseMatrix<double> Mi;
+    igl::invert_diag(M,Mi);
+    energy = (Vc.transpose() * L * Mi * L * Vc).trace();
+    std::cout << "Energy is " << energy << std::endl;
+
+    using namespace std;
+    cout << "diff: " << diff << endl;
+    cout << "prev_diff: " << prev_diff << endl;
+    cout << "change_val: " << change_val << endl;
+    cout << "delta: " << diff / V.rows() << endl;
+
+    // 100
+    // 110
+
+  } while (counter++ < 10);
+
+  return energy;
 }
 
 // Previous function that allows one to view the biharmonic.

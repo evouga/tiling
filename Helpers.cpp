@@ -1,12 +1,16 @@
 #include "Helpers.h"
 #include "glob_defs.h"
+#include "curvatureFlow.h"
 
 #include <iostream>
 #include <cstdio>
 #include <set>
 
 #include <igl/copyleft/tetgen/tetrahedralize.h>
+#include <igl/jet.h>
 #include <igl/remove_duplicates.h>
+#include <igl/remove_unreferenced.h>
+#include <igl/resolve_duplicated_faces.h>
 #include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
 
@@ -89,9 +93,25 @@ void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  const Eigen::VectorXi &M) {
   igl::viewer::Viewer v;
+
+  Eigen::MatrixXd Vnew;
+
+  v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
+    if (key == ' ') {
+      biharmonic(V, F, M, Vnew);
+      v.data.set_mesh(Vnew, F);
+    }
+    return true;
+  };
+
   v.data.clear();
+
   v.data.set_mesh(V, F);
   v.data.set_face_based(true);
+
+  Eigen::MatrixXd origCols;
+  igl::jet(M, true, origCols);
+  v.data.set_colors(origCols);
   
   // Show only one marker for each contour.
   set<int> used;
@@ -146,6 +166,26 @@ void combineMesh(const vector<Eigen::MatrixXd> &Vs,
 
     vertex_offset += vertices.rows();
     face_offset += faces.rows();
+  }
+
+  removeDuplicates(V, F, M);
+}
+
+void extractShell(Eigen::MatrixXd &V1, Eigen::MatrixXi &F1, Eigen::VectorXi &M1,
+                  Eigen::MatrixXd &V2, Eigen::MatrixXi &F2, Eigen::VectorXi &M2) {
+  Eigen::MatrixXi F_unique;
+  Eigen::VectorXi J;
+  igl::resolve_duplicated_faces(F1, F_unique, J);
+
+  // J is the same size as V
+  igl::remove_unreferenced(V1, F_unique, V2, F2, J);
+
+  M2.resize(V2.rows());
+
+  // J_i is -1 if the vertex was removed.
+  for (int i = 0; i < M1.rows(); ++i) {
+    if (J(i) != -1)
+      M2(J(i)) = M1(i);
   }
 }
 

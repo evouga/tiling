@@ -327,6 +327,7 @@ Tile::Tile(const set<int> &upper_contours, const vector<set<int> > &components,
     this->components.push_back(new Component(contours));
 }
 
+// TODO(bradyz): The bug in cycles is here.
 vector<set<int> > Tile::getUpperConnected() const {
   vector<set<int> > result;
   for (const Component *component : this->components) {
@@ -403,7 +404,7 @@ bool Tile::isValid() const {
 
   // 2*** means at one point connected.
   dummy_node = 2000;
-  for (set<int> connected : this->bottom_parent->getUpperConnected()) {
+  for (const set<int> &connected : this->bottom_parent->getUpperConnected()) {
     if (connected.size() == 1)
       continue;
     for (int u : connected) {

@@ -44,7 +44,7 @@ namespace GLOBAL {
   // See -a flag. Lower value creates smaller triangles. With "hack" in place
   // (see Tile.cpp), a value of 0.04 isn't terrible.
   //const float triangle_max_area = 0.04;
-  const float TRI_AREA = 0.005;
+  const float TRI_AREA = 0.004;
   // Variable used by tetgen to determine the maximum allowed *ratio* between
   // the radius and the area. See -q flag. With "hack" in place (see Tile.cpp),
   // a value of 1.4 isn't terrible.
