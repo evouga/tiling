@@ -483,6 +483,20 @@ vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
   // Generate possible tilings.
   vector<vector<set<int> > > possible = exactSetCover(all_contours, components);
 
+  printf("All contours:");
+  for (int s : all_contours) {
+    printf(" %d", s);
+  }
+
+  printf("\nComponents:\n");
+  for (const set<int> &st : components) {
+    for (int s : st) {
+      printf(" %d", s);
+    }
+    printf("\n");
+  }
+  printf("Found %u total covers, trying to find valid ones\n", possible.size());
+
   // Go through all possible tilings and find ones with no loops.
   for (const vector<set<int> > &tiling : possible) {
     Tile *tile = new Tile(upper, tiling, parent);
@@ -491,8 +505,10 @@ vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
     // Get rid of the tile if it's no good.
     if (tile->isValid())
       result.push_back(tile);
-    else
+    else {
+      std::cout << "Cover invalid from tile: " << *tile << std::endl;
       delete tile;
+    }
   }
 
   return result;

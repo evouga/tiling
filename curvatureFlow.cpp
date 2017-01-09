@@ -124,7 +124,7 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     for (int i = 0; i < V.rows(); ++i) {
       diff += (Vc.row(i) - D.row(i)).norm();
     }
-    printf("Difference this round is %f\n", diff);
+    //printf("Difference this round is %f\n", diff);
     
     // Update the values.
     Vc = D;
@@ -133,16 +133,13 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     Eigen::SparseMatrix<double> Mi;
     igl::invert_diag(M,Mi);
     energy = (Vc.transpose() * L * Mi * L * Vc).trace();
-    std::cout << "Energy is " << energy << std::endl;
+    //std::cout << "Energy is " << energy << std::endl;
 
-    using namespace std;
-    cout << "diff: " << diff << endl;
-    cout << "prev_diff: " << prev_diff << endl;
-    cout << "change_val: " << change_val << endl;
-    cout << "delta: " << diff / V.rows() << endl;
-
-    // 100
-    // 110
+    //using namespace std;
+    //cout << "diff: " << diff << endl;
+    //cout << "prev_diff: " << prev_diff << endl;
+    //cout << "change_val: " << change_val << endl;
+    //cout << "delta: " << diff / V.rows() << endl;
 
   } while (counter++ < 10);
 

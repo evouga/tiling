@@ -101,7 +101,7 @@ double energy (Tile *tile) {
   Eigen::MatrixXd unused;
   double score = biharmonic(V, F, O, unused);
 
-  if (isnan(score))
+  if (std::isnan(score))
     return INFINITY;
   return score;
 }
@@ -192,8 +192,10 @@ int main(int argc, char *argv[]) {
       }
 
       string tile_id = terribleHashFunction(tile);
+      printf("Searching for tile [%s]\n", tile_id.c_str());
       if (best_tiles.find(tile_id) == best_tiles.end()) {
         best_tiles[tile_id] = tile;
+        printf("  Found another, comparing\n");
       }
       else {
         // Find the one with lower energy.
@@ -214,6 +216,7 @@ int main(int argc, char *argv[]) {
     cout << "Level: " << i << endl;
     cout << "Contours: " << ss.getSizeAt(i) << endl;
     cout << "Valid tiles: " << generated[i].size() << endl;
+    cout << endl << endl;
 
     // Next bot is the current top.
     botV = topV;
