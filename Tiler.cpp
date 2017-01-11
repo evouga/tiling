@@ -145,14 +145,15 @@ set<set<uint> > exactSetCover(const vector<uint> &subsets, uint m) {
 template <typename T>
 vector<vector<set<T> > > exactSetCover(set<T> to_cover, vector<set<T> > subsets) {
   // Generate element ids {0, 1, ..., n}.
+  uint current_size = 0;
   map<T, uint> to_binary;
   for (set<T> &subset : subsets)
     for (T element : subset)
       if (to_binary.find(element) == to_binary.end())
-        to_binary[element] = to_binary.size();
+        to_binary[element] = current_size++;
   for (T element : to_cover)
     if (to_binary.find(element) == to_binary.end())
-      to_binary[element] = to_binary.size();
+      to_binary[element] = current_size++;
 
   // Convert the subsets to their binary representation.
   // If we have 3 total elements:
