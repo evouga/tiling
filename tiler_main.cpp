@@ -105,7 +105,7 @@ ConnectedComponent componentFromContours(SliceStack &ss,
 
 vector<set<int> > getHeatFlowValidComponents(SliceStack &ss, int level) {
   // Need heat values for the contour tree.
-  ss.triangulateSlice(i, GLOBAL::TRI_AREA,
+  ss.triangulateSlice(level, GLOBAL::TRI_AREA,
                       botV, botF, topV, topF, botM, topM);
   ss.tetrahedralizeSlice(botV, botF, topV, topF,
                          botM, topM, tetV, tetT, tetF, tetM);
