@@ -1,14 +1,6 @@
 #ifndef TILER_H
 #define TILER_H
 
-/* These methods are used to perform the tiling.
- *
- * Currently these are just combinatorics methods.
- * 
- * TODO(bradyz, nclement): implement incremental scoring.
- *
- * */
-
 #include <set>
 #include <vector>
 
@@ -88,6 +80,26 @@ std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
 std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
                                  const std::vector<std::set<int> > &components,
                                  bool isLast);
+
+/**
+ * View a full tile.
+ *
+ * Arguments:
+ *  @param tile - tile to be viewed.
+ */
+void viewTile(const Tile *tile);
+
+/**
+ * Combine all components and extract the surface of a tile.
+ *
+ * Arguments:
+ *  @param tile - tile to get mesh on.
+ *  @param V - output vertices.
+ *  @param F - output faces.
+ *  @param O - output markers.
+ */
+void getTileMesh (Tile *tile,
+                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
 
 } // namespace Tiler
 

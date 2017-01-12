@@ -1,5 +1,7 @@
 #include "viewTetMesh.h"
 
+#include <set>
+
 #include <igl/barycenter.h>
 #include <igl/bfs_orient.h>
 #include <igl/copyleft/marching_cubes.h>
@@ -117,9 +119,12 @@ namespace {
 			viewer.data.set_colors(C_temp);
       viewer.core.lighting_factor = 0;
 		}
+    std::set<int> used;
     for (int i = 0; i < _TM.rows(); i++) {
-      if (_TM(i) != GLOBAL::nonoriginal_marker)
+      if (used.find(_TM(i)) == used.end() && _TM(i) != GLOBAL::nonoriginal_marker) {
+        used.insert(_TM(i));
         viewer.data.add_label(_TV.row(i), std::to_string(_TM(i)));
+      }
     }
   }
 

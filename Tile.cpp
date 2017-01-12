@@ -45,23 +45,15 @@ void Tile::addOrig(const Slice &s,
   bool first = true;
   lims.resize(2, 2);
   int numcontours = s.contours.size();
+
   // Iterate over all contours
-  for(int i=0; i<numcontours; i++) {
-    // Check and make sure this is a valid contour.
-    bool is_allowed = false;
-    for (int j = 0; j < allowed.size(); ++j) {
-      if (i == allowed[j]) {
-        is_allowed = true;
-        break;
-      }
-    }
-    // If allowed is empty, all contours are valid.
-    if (!is_allowed && allowed.size() > 0) {
+  for(const Contour &contour : s.contours) {
+    if (allowed.size() > 0 &&
+        find(allowed.begin(), allowed.end(), contour.contour_id) == allowed.end())
       continue;
-    }
 
     // Get the number of points for this contour.
-    int numpts = s.contours[i].x.size();
+    int numpts = contour.x.size();
 
     // Number of points we've added to this point.
     int offset = V.size();
@@ -69,7 +61,7 @@ void Tile::addOrig(const Slice &s,
     // Find all points in this contour.
     for(int j=0; j<numpts; j++) {
       // pt is the point.
-      RowVector2d pt(s.contours[i].x[j], s.contours[i].y[j]);
+      RowVector2d pt(contour.x[j], contour.y[j]);
       V.push_back(pt);
 
       // Which point should we connect this to?
@@ -79,7 +71,7 @@ void Tile::addOrig(const Slice &s,
       E.push_back(ed);
 
       // The vertex will be marked by the contour id.
-      VM.push_back(s.contours[i].contour_id);
+      VM.push_back(contour.contour_id);
       EM.push_back(GLOBAL::original_marker);
 
       if (first) {

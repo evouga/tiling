@@ -63,7 +63,8 @@ void SliceStack::triangulateSlice(int start, double areaBound,
                                   Eigen::VectorXi &botO, Eigen::VectorXi &topO) {
   // Call the triangulateSlice with empty parameters.
   std::vector<int> all_empty;
-  triangulateSlice(start, areaBound, botV,botF, topV,topF, botO, topO, all_empty, all_empty);
+  triangulateSlice(start, areaBound, botV, botF, topV, topF, botO, topO,
+                   all_empty, all_empty);
 }
 
 void SliceStack::triangulateSlice(int start, double areaBound,
@@ -74,13 +75,8 @@ void SliceStack::triangulateSlice(int start, double areaBound,
                                   const std::vector<int> &allowed_top) {
   assert(start >= 0 && start < slices_.size());
 
-  printf("PRE Number of vertices: ");
-  printf("top %lu bot %lu\n", topV.rows(), botV.rows());
-
   Tile t(*slices_[start], *slices_[start+1], bbox_, allowed_bot, allowed_top);
   t.triangulateSlices(areaBound, botV, botF, topV, topF, botO, topO);
-
-  printf("Number of vertices: top %lu bot %lu\n", topV.rows(), botV.rows());
 
   // Then flip normals of bottom slice
   flipNormal(botF);
@@ -408,59 +404,48 @@ void SliceStack::tetrahedralizeSlice (
   Helpers::tetrahedralize(V, F, M, FM, TV, TT, TF, TO);
 }
 
-void SliceStack::computeLaplace(const Eigen::MatrixXd &TV,
-                                const Eigen::MatrixXi &TT,
-                                const Eigen::MatrixXi &TF,
-                                const Eigen::VectorXi &TO,
-                                Eigen::VectorXd &Z) {
+void SliceStack::computeLaplace(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT,
+                                const Eigen::MatrixXi &TF, const Eigen::VectorXi &TO,
+                                Eigen::VectorXd &Z, const set<int> &allowed) {
   bool laplace_DEBUG = false;
-
 	Eigen::IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
 	Eigen::IOFormat LongFmt(10, 0, ", ", "\n", "[", "]");
 	Eigen::IOFormat RFmt(4, 0, ", ", ", ", "", "", "(", ")");
+
 	assert(TO.rows() == TV.rows());
 
-  if (laplace_DEBUG) printf("Setting constant values...");
-	Eigen::VectorXi known;
-	Eigen::VectorXd known_c;
 	std::vector<int> known_v;
 	std::vector<double> known_c_v;
   auto mx = TV.colwise().maxCoeff();
   auto mn = TV.colwise().minCoeff();
 
 	for (int i = 0; i < TO.rows(); ++i) {
-		/*
-		if (TV(i,2) == -GLOBAL::z_lim) {
-			known_v.push_back(i);
-			known_c_v.push_back(1);
-		} else if (TV(i,2) == GLOBAL::z_lim) {
-			known_v.push_back(i);
-			known_c_v.push_back(0);
-		}
-		*/
-		if (TO(i) != GLOBAL::nonoriginal_marker) {
+		if (allowed.size() == 0 && TO(i) != GLOBAL::nonoriginal_marker) {
 			known_v.push_back(i);
 			known_c_v.push_back(GLOBAL::inside_temp);
-		} else if (TV(i,2) == mx(2) || TV(i,2) == mn(2)) {
+		}
+    else if (allowed.find(TO(i)) != allowed.end()) {
+			known_v.push_back(i);
+			known_c_v.push_back(GLOBAL::inside_temp);
+    }
+    else if (TV(i,2) == mx(2) || TV(i,2) == mn(2)) {
 			known_v.push_back(i);
 			known_c_v.push_back(GLOBAL::outside_temp);
 		}
 	}
+
 	if (laplace_DEBUG) 
     printf("done! Number of known values is %lu/%lu\n",
            known_v.size(), TV.rows());
-	known.resize(known_v.size());
-	known_c.resize(known_v.size());
+
+	Eigen::VectorXi known(known_v.size());
+	Eigen::VectorXd known_c(known_v.size());
+
 	for (int i = 0; i < known_c.size(); ++i) {
 		known(i) = known_v[i];
 		known_c(i) = known_c_v[i];
 	}
-	
-  if (laplace_DEBUG) 
-    printf("Constructing Laplacian...");
-	// Construct Laplacian
-	// Dense matrix first
-	//
+
 	Eigen::SparseMatrix<double> L(TV.rows(), TV.rows());
 	// Set non-diag elements to 1 if connected, 0 otherwise
 	// Use the tets instead of the faces
@@ -475,12 +460,11 @@ void SliceStack::computeLaplace(const Eigen::MatrixXd &TV,
 	for (int i = 0; i < TV.rows(); ++i) {
 		L.coeffRef(i,i) = -L.row(i).sum();
 	}
-	//Eigen::SparseMatrix<double> L = L_d.sparseView();//, L_known, L_others;
-  if (laplace_DEBUG)
+
+  if (laplace_DEBUG) {
     printf("done! Number non-zeros is %d\n", L.nonZeros());
-	
-  if (laplace_DEBUG)
     printf("Solving energy constraints...");
+  }
 
 	// Solve energy constraints.
 	igl::min_quad_with_fixed_data<double> mqwf;
@@ -489,32 +473,12 @@ void SliceStack::computeLaplace(const Eigen::MatrixXd &TV,
 	// Empty Constraints
 	Eigen::VectorXd Beq;
 	Eigen::SparseMatrix<double> Aeq;
-	bool success = igl::min_quad_with_fixed_precompute(L, known, Aeq, false, mqwf);
-	if(!success)
+
+	if (!igl::min_quad_with_fixed_precompute(L, known, Aeq, false, mqwf))
 		fprintf(stderr,"ERROR: fixed_precompute didn't work!\n");
+
 	igl::min_quad_with_fixed_solve(mqwf,B,known_c,Beq, Z);
 
   if (laplace_DEBUG)
-    printf("done!\n");
-
-  // Here's how to view it all:
-  /*
-	// Pseudo-color based on solution
-	Eigen::MatrixXd C;
-	igl::jet(Z, true, C);
-  printf("Min Z is %lf and max Z is %lf\n", Z.minCoeff(), Z.maxCoeff());
-
-  TetMeshViewer::viewTetMesh(TV, TT, TF, Z, true);
-
-  // Plot the mesh with pseudocolors
-  // igl::viewer::Viewer viewer;
-  // viewer.data.set_mesh(TV, TF);
-	// viewer.data.set_face_based(true);
-  // viewer.core.show_lines = false;
-  // viewer.data.set_colors(C);
-  // viewer.launch();
-
-  igl::writeOFF("triangulation.off", TV, TF);
-  TetMeshViewer::viewOffsetSurface(TV, TF, TT, Z);
-  */
+    printf("fixed_solve complete.\n");
 }

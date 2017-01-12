@@ -10,6 +10,7 @@
 class Slice;
 
 class SliceStack {
+
 public:
 	SliceStack(const char *baseFilename, const char *objectname);
 	~SliceStack();
@@ -57,19 +58,21 @@ public:
   // The output is Z, a vector that contains heat values for each vertex of TV.
 	void computeLaplace(const Eigen::MatrixXd &TV,
 											const Eigen::MatrixXi &TT, const Eigen::MatrixXi &TF,
-											const Eigen::VectorXi &TO, Eigen::VectorXd &Z);
+											const Eigen::VectorXi &TO, Eigen::VectorXd &Z,
+                      const std::set<int> &allowed=std::set<int>());
 
   int getSizeAt(int i);
 
   std::set<int> getContoursAt(int i);
 
-
 private:
-	void flipNormal(Eigen::MatrixXi &f);
 	int numSlices_;
 	std::vector<Slice*> slices_;
 	std::vector<double> heights_;
   Eigen::MatrixXd bbox_;
+
+	void flipNormal(Eigen::MatrixXi &f);
+
 };
 
 #endif

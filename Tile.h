@@ -6,6 +6,7 @@
 class Slice;
 
 class Tile {
+
 public:
 	Tile(const Slice &bottom, const Slice &top, const Eigen::MatrixXd &bbox);
 	Tile(const Slice &bottom, const Slice &top, const Eigen::MatrixXd &bbox,

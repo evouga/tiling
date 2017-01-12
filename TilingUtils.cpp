@@ -248,7 +248,8 @@ vector<ConnectedComponent> allPossibleTiles(
   vector<ConnectedComponent> unique_components;
 
   // Go through all offsets and generate surfaces.
-  for (double offset: unique_offsets) {
+  // for (double offset: unique_offsets) {
+  for (double offset = 0.2; offset < 1.0; offset += 0.3) {
     Eigen::MatrixXd offsetV;
     Eigen::MatrixXi offsetF;
     Eigen::VectorXi offsetO;
@@ -272,20 +273,8 @@ vector<ConnectedComponent> allPossibleTiles(
       }
 
       // If this is a new combination, used it.
-      if (index == -1) {
+      if (index == -1)
         unique_components.push_back(component);
-      }
-      else {
-        Eigen::MatrixXd unused;
-        const ConnectedComponent &contender = unique_components[index];
-
-        // Find the one with lower energy.
-        double e1 = biharmonic(component.V, component.F, component.M, unused);
-        double e2 = biharmonic(contender.V, contender.F, contender.M, unused);
-
-        if (e1 < e2)
-          unique_components[index] = component;
-      }
     }
   }
 

@@ -46,13 +46,6 @@ Eigen::VectorXi tetM;
 // Heat.
 Eigen::VectorXd H;
 
-vector<set<int> > convertCCsToCover(const vector<ConnectedComponent> &ccs) {
-  vector<set<int> > result;
-  for (const ConnectedComponent &cc : ccs)
-    result.push_back(cc.contours_used);
-  return result;
-}
-
 string terribleHashFunction (const Tile *tile) {
   vector<set<int> > connected = tile->getUpperConnected();
   sort(connected.begin(), connected.end());
@@ -64,28 +57,6 @@ string terribleHashFunction (const Tile *tile) {
     ss << endl;
   }
   return ss.str();
-}
-
-// Extracts the surface of the current level of the given tile.
-void getTileMesh (Tile *tile,
-                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O) {
-  vector<Eigen::MatrixXd> tileVs;
-  vector<Eigen::MatrixXi> tileFs;
-  vector<Eigen::VectorXi> tileMs;
-
-  for (Component *component : tile->components) {
-    tileVs.push_back(component->V);
-    tileFs.push_back(component->F);
-    tileMs.push_back(component->M);
-  }
-
-  // Full mesh.
-  Eigen::MatrixXd tileV;
-  Eigen::MatrixXi tileF;
-  Eigen::VectorXi tileM;
-
-  Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
-  Helpers::extractShell(tileV, tileF, tileM, V, F, O);
 }
 
 double energy (Tile *tile) {
@@ -106,36 +77,44 @@ double energy (Tile *tile) {
   return score;
 }
 
-void viewTile(Tile *tile) {
-  cout << endl << "Sample full tile stack top to bottom - " << endl;
-  cout << *tile << endl;
+// NOTE: the tet-mesh should be created before calling this function.
+ConnectedComponent componentFromContours(SliceStack &ss,
+                                         const set<int> &contours_allowed) {
+  ss.computeLaplace(tetV, tetT, tetF, tetM, H, contours_allowed);
+  vector<ConnectedComponent> ccs = allPossibleTiles(tetV, tetF, tetT, tetM, H);
 
-  // Get vector of full mesh.
-  vector<Component*> components = tile->getAllComponents();
+  ConnectedComponent result = ccs[0];
+  double result_score = -1.0;
 
-  vector<Eigen::MatrixXd> tileVs;
-  vector<Eigen::MatrixXi> tileFs;
-  vector<Eigen::VectorXi> tileMs;
+  // TODO(bradyz): find a scoring mechanism.
+  for (ConnectedComponent &cc : ccs) {
+    if (cc.contours_used == contours_allowed) {
+      result = cc;
 
-  for (Component *component : components) {
-    tileVs.push_back(component->V);
-    tileFs.push_back(component->F);
-    tileMs.push_back(component->M);
+      // Eigen::MatrixXd Vnew;
+      // Eigen::MatrixXi Fnew;
+      // Eigen::VectorXi Mnew;
+      // Helpers::extractShell(result.V, result.F, result.M, Vnew, Fnew, Mnew);
+      // Helpers::viewTriMesh(Vnew, Fnew, Mnew);
+      // Helpers::viewTriMesh(result.V, result.F, result.M);
+    }
   }
 
-  // Full mesh.
-  Eigen::MatrixXd tileV;
-  Eigen::MatrixXi tileF;
-  Eigen::VectorXi tileM;
+  return result;
+}
 
-  Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
+vector<set<int> > getHeatFlowValidComponents(SliceStack &ss, int level) {
+  // Need heat values for the contour tree.
+  ss.triangulateSlice(i, GLOBAL::TRI_AREA,
+                      botV, botF, topV, topF, botM, topM);
+  ss.tetrahedralizeSlice(botV, botF, topV, topF,
+                         botM, topM, tetV, tetT, tetF, tetM);
+  ss.computeLaplace(tetV, tetT, tetF, tetM, H);
 
-  Eigen::MatrixXd Vborder;
-  Eigen::MatrixXi Fborder;
-  Eigen::VectorXi Oborder;
-
-  Helpers::extractShell(tileV, tileF, tileM, Vborder, Fborder, Oborder);
-  Helpers::viewTriMesh(Vborder, Fborder, Oborder);
+  vector<set<int> > result;
+  for (const ConnectedComponent &cc : allPossibleTiles(tetV, tetF, tetT, tetM, H))
+    result.push_back(cc.contours_used);
+  return result;
 }
 
 int main(int argc, char *argv[]) {
@@ -153,16 +132,7 @@ int main(int argc, char *argv[]) {
     if ((generated[i-1].size() == 0) || (ss.getSizeAt(i) <= 0))
       return -1;
 
-    // Need heat values for the contour tree.
-    ss.triangulateSlice(i, GLOBAL::TRI_AREA,
-                        botV, botF, topV, topF, botM, topM);
-    ss.tetrahedralizeSlice(botV, botF, topV, topF,
-                           botM, topM, tetV, tetT, tetF, tetM);
-    ss.computeLaplace(tetV, tetT, tetF, tetM, H);
-
-    vector<ConnectedComponent> ccs = allPossibleTiles(tetV, tetF, tetT, tetM, H);
-    vector<set<int> > components = convertCCsToCover(ccs);
-
+    vector<set<int> > components = getHeatFlowValidComponents(ss, i);
     set<int> upper = ss.getContoursAt(i+1);
 
     vector<Tile*> current_level_tiles;
@@ -180,18 +150,16 @@ int main(int argc, char *argv[]) {
     for (Tile *tile : current_level_tiles) {
       // TODO(bradyz): Combine both component classes.
       // NOTE: This loop must be done before calling getTileMesh, energy.
-      for (Component *component : tile->components) {
-        int index = -1;
-        for (int j = 0; j < components.size(); j++) {
-          if (component->contours_used == components[j])
-            index = j;
-        }
-        component->V = ccs[index].V;
-        component->F = ccs[index].F;
-        component->M = ccs[index].M;
+      for (Component *cc : tile->components) {
+        ConnectedComponent tmp = componentFromContours(ss, cc->contours_used);
+        cc->V = tmp.V;
+        cc->F = tmp.F;
+        cc->M = tmp.M;
       }
 
+      // Want to save the best from each unique parent connectivity.
       string tile_id = terribleHashFunction(tile);
+
       if (best_tiles.find(tile_id) == best_tiles.end()) {
         best_tiles[tile_id] = tile;
       }
@@ -219,12 +187,15 @@ int main(int argc, char *argv[]) {
     botV = topV;
     botF = topF;
     botM = topM;
+
+    // For debugging.
+    for (Tile *tile : generated[i])
+      viewTile(tile);
   }
 
   cout << generated[start + num_slices - 1].size() << " valid tilings." << endl;
 
   // Show full tiles.
-  for (Tile *tile : generated[start + num_slices - 1]) {
+  for (Tile *tile : generated[start + num_slices - 1])
     viewTile(tile);
-  }
 }

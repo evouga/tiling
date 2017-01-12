@@ -6,6 +6,9 @@
 #include <cstdio>
 #include <set>
 
+#include <Eigen/Core>
+
+#include <igl/collapse_small_triangles.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/jet.h>
 #include <igl/remove_duplicates.h>
@@ -90,38 +93,63 @@ void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
   igl::triangle::triangulate(P, E, H_unused, buffer, V, F);
 }
 
-void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                 const Eigen::VectorXi &M) {
-  igl::viewer::Viewer v;
 
-  Eigen::MatrixXd Vnew;
+namespace {
 
-  v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
-    if (key == ' ') {
-      biharmonic(V, F, M, Vnew);
-      v.data.set_mesh(Vnew, F);
-    }
-    return true;
-  };
+void resetView (igl::viewer::Viewer &view,
+                const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                const Eigen::VectorXi &M, const Eigen::MatrixXd &C) {
+  view.data.clear();
 
-  v.data.clear();
+  view.data.set_mesh(V, F);
+  view.data.set_colors(C);
 
-  v.data.set_mesh(V, F);
-  v.data.set_face_based(true);
-
-  Eigen::MatrixXd origCols;
-  igl::jet(M, true, origCols);
-  v.data.set_colors(origCols);
-  
   // Show only one marker for each contour.
   set<int> used;
 
   for (int i = 0; i < M.rows(); i++) {
     if (M(i) != GLOBAL::nonoriginal_marker && used.find(M(i)) == used.end()) {
-      v.data.add_label(V.row(i), to_string(M(i)));
+      view.data.add_label(V.row(i), to_string(M(i)));
       used.insert(M(i));
     }
   }
+}
+
+}
+
+void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                 const Eigen::VectorXi &M) {
+  igl::viewer::Viewer v;
+
+  // Colors.
+  Eigen::MatrixXd C;
+  igl::jet(M, true, C);
+
+  Eigen::MatrixXd V_biharmonic;
+  Eigen::MatrixXi F_biharmonic;
+
+  v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
+    if (key == ' ') {
+      biharmonic(V, F, M, V_biharmonic);
+      igl::collapse_small_triangles(V_biharmonic, F, 1e-6, F_biharmonic);
+
+      resetView(v, V_biharmonic, F_biharmonic, M, C);
+    }
+    else if (key == 'R') {
+      resetView(v, V, F, M, C);
+    }
+    return true;
+  };
+
+  resetView(v, V, F, M, C);
+
+  int max_index = 0;
+  for (int i = 0; i < F.rows(); i++)
+    for (int j = 0; j < 3; j++)
+      max_index = max(max_index, F(i, j));
+
+  cout << "launching viewer" << endl;
+  cout << M.rows() << " " << V.rows() << " " << max_index << " " << endl;
 
   v.launch();
 }
