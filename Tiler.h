@@ -82,14 +82,6 @@ std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
                                  bool isLast);
 
 /**
- * View a full tile.
- *
- * Arguments:
- *  @param tile - tile to be viewed.
- */
-void viewTile(const Tile *tile);
-
-/**
  * Combine all components and extract the surface of a tile.
  *
  * Arguments:
@@ -97,9 +89,11 @@ void viewTile(const Tile *tile);
  *  @param V - output vertices.
  *  @param F - output faces.
  *  @param O - output markers.
+ *  @param full_tile - set to false to get just the current level mesh.
  */
 void getTileMesh (Tile *tile,
-                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
+                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
+                  bool full_tile);
 
 } // namespace Tiler
 

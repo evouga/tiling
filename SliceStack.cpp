@@ -271,8 +271,8 @@ void SliceStack::tetrahedralizeSlice (
          ymax = std::max(botMax(1), topMax(1)),
          zmax = std::max(botMax(2), topMax(2));
 
-  printf("bounding box is %f,%f %f,%f %f,%f\n",
-         xmin,xmax, ymin,ymax, zmin,zmax);
+  // printf("bounding box is %f,%f %f,%f %f,%f\n",
+  //        xmin,xmax, ymin,ymax, zmin,zmax);
 
   vector<Eigen::Vector3d> leftV;
   vector<Eigen::Vector3d> rightV;
@@ -401,7 +401,9 @@ void SliceStack::tetrahedralizeSlice (
 	// TT will have the "" tet indices (#V x 4)
 	// TF will have the "" face indices (#V x 3)
 	// TO will have the "" vertex markers
+
   Helpers::tetrahedralize(V, F, M, FM, TV, TT, TF, TO);
+
 }
 
 void SliceStack::computeLaplace(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT,

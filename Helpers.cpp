@@ -16,6 +16,7 @@
 #include <igl/resolve_duplicated_faces.h>
 #include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
+#include <igl/writeOFF.h>
 
 using namespace std;
 
@@ -72,8 +73,9 @@ void tetrahedralize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   assert(V.rows() == VM.rows() && F.rows() == FM.rows());
 
   char buffer[80];
-  sprintf(buffer, "pq%fYQ", GLOBAL::TET_RATIO);
+  sprintf(buffer, "Qpq%fY", GLOBAL::TET_RATIO);
 
+  // This prints out a number for some reason.
   igl::copyleft::tetgen::tetrahedralize(V, F, VM, FM, buffer, TV, TT, TF, TO);
 
   // Tetgen has some weird markers it introduces. Make them all either
@@ -143,13 +145,8 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
   resetView(v, V, F, M, C);
 
-  int max_index = 0;
-  for (int i = 0; i < F.rows(); i++)
-    for (int j = 0; j < 3; j++)
-      max_index = max(max_index, F(i, j));
-
-  cout << "launching viewer" << endl;
-  cout << M.rows() << " " << V.rows() << " " << max_index << " " << endl;
+  // Getting random segfaults. Write it to see if it is a mesh problem.
+  igl::writeOFF("mesh.off", V, F);
 
   v.launch();
 }

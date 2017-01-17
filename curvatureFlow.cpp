@@ -91,7 +91,6 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   if (remove_interior) {
     removeInterior(F, orig, new_orig);
   }
-
   Eigen::VectorXi b;
   // Get the correct indices.
   convertVectorToIndices(new_orig, b);
@@ -105,12 +104,7 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // Initialize Vc with input vertices V
   Vc = V;
 
-  double energy = -1.0;
-  double diff = 0.0;
-  double prev_diff = 0.0;
-  int counter = 0;
-  do {
-    prev_diff = diff;
+  for (int counter = 0; counter < 10; counter++) {
     // Recompute M, leave L alone.
     igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
 
@@ -118,8 +112,8 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     Eigen::MatrixXd D;
     igl::harmonic(L,M, b,V_bc, 2, D);
 
-    // Calculate the difference.
-    diff = 0;
+    // Calculate the difference in vertex positions.
+    double diff = 0;
     // Vertices updated like:
     for (int i = 0; i < V.rows(); ++i) {
       diff += (Vc.row(i) - D.row(i)).norm();
@@ -127,14 +121,12 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
     // Update the values.
     Vc = D;
+  }
 
-    // Calculate the energy.
-    Eigen::SparseMatrix<double> Mi;
-    igl::invert_diag(M,Mi);
-    energy = (Vc.transpose() * L * Mi * L * Vc).trace();
-  } while (counter++ < 10);
-
-  return energy;
+  // Calculate the energy.
+  Eigen::SparseMatrix<double> Mi;
+  igl::invert_diag(M, Mi);
+  return (Vc.transpose() * L * Mi * L * Vc).trace();
 }
 
 // Previous function that allows one to view the biharmonic.

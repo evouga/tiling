@@ -134,8 +134,6 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
                             Eigen::MatrixXd &verts, Eigen::MatrixXi &faces,
                             Eigen::VectorXi &orig,
                             const std::vector<int> &allowed) {
-  cout << "num contours: " << s.contours.size() << endl;
-
   std::vector<RowVector2d> V_v;
   std::vector<RowVector2i> E_v;
   std::vector<int> VM_v, EM_v;
@@ -175,8 +173,6 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
     EM(totpts + i) = GLOBAL::nonoriginal_marker;
   }
 
-  cout << "Delaunay triangulating mesh with " << V.rows() << " verts" << endl;
-
   stringstream ss;
   ss << "QDa" << areaBound << "q";
 
@@ -201,8 +197,8 @@ void Tile::triangulateSlices(double areaBound,
 #ifdef ZSCALE_HACK
   double thickness = 0.4;
   // thickness = (botverts.colwise().maxCoeff() - botverts.colwise().minCoeff()).maxCoeff();
-  printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
-         __FILE__, __LINE__, thickness, bottom_.thickness);
+  // printf("[%s:%d] Hack in place; thickness is set to %lf, instead of %lf\n",
+  //        __FILE__, __LINE__, thickness, bottom_.thickness);
 #else
   double thickness = bottom_.thickness;
 #endif

@@ -105,8 +105,8 @@ void outputTree(ctBranch* b, tourtre_data* tdat, vector<int> &nodes,
   if ( (tdat->_H(b->saddle) > 0 && tdat->_H(b->saddle) < 1)) {
     unique_offsets.insert(tdat->_H(b->extremum));
     unique_offsets.insert(tdat->_H(b->saddle));
-    printf("(%zu:%f %zu:%f)\n", b->extremum, tdat->_H(b->extremum),
-           b->saddle, tdat->_H(b->saddle));
+    // printf("(%zu:%f %zu:%f)\n", b->extremum, tdat->_H(b->extremum),
+    //        b->saddle, tdat->_H(b->saddle));
   }
   nodes.push_back(b->extremum);
   nodes.push_back(b->saddle);
@@ -209,54 +209,53 @@ vector<ConnectedComponent> getConnectedComponents(const Eigen::MatrixXd &V,
 vector<ConnectedComponent> allPossibleTiles(
     const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
     const Eigen::VectorXi &TO, const Eigen::VectorXd &H) {
-  // Use libtourtre to find all possible saddle points, which leads to all possible
-  // connected components.
-  // Create data struct
-  tourtre_data tdat(TV, TF, TT, H, TO);
-  // Create sorted indices.
-  vector<size_t> orders;
-  orders.resize(TV.rows());
-  iota(orders.begin(), orders.end(), 0);
-  sort(orders.begin(), orders.end(), 
-            [H](size_t i1, size_t i2) { return H(i1) < H(i2); });
-  // Init libtourtre.
-  ctContext *ctx = ct_init(
-      TV.rows(), // # vertices
-      &(orders.front()), // address of the front of the vector gives same as a C array
-      &value, // function that returns the value of a given index
-      &neighbors, // function that returns the number of & neighbors of a given index
-      &tdat // data for callbacks
-      );
-
-  // Extract information.
-  ct_sweepAndMerge(ctx);
-  ctBranch* root = ct_decompose(ctx);
-  ct_cleanup(ctx);
-
-  vector<int> nodes;
-  set<double> unique_offsets;
-  outputTree(root, &tdat, nodes, unique_offsets);
-  Eigen::MatrixXd pts, pts_cols;
-  Eigen::VectorXd pts_cols_i;
-  pts.resize(nodes.size(), 3);
-  pts_cols_i.resize(nodes.size());
-  for (int i = 0; i < nodes.size(); ++i) {
-    pts.row(i) = TV.row(nodes[i]);
-    pts_cols_i(i) = H(nodes[i]);
-  }
+  // // Use libtourtre to find all possible saddle points, which leads to all possible
+  // // connected components.
+  // // Create data struct
+  // tourtre_data tdat(TV, TF, TT, H, TO);
+  // // Create sorted indices.
+  // vector<size_t> orders;
+  // orders.resize(TV.rows());
+  // iota(orders.begin(), orders.end(), 0);
+  // sort(orders.begin(), orders.end(), 
+  //           [H](size_t i1, size_t i2) { return H(i1) < H(i2); });
+  // // Init libtourtre.
+  // ctContext *ctx = ct_init(
+  //     TV.rows(), // # vertices
+  //     &(orders.front()), // address of the front of the vector gives same as a C array
+  //     &value, // function that returns the value of a given index
+  //     &neighbors, // function that returns the number of & neighbors of a given index
+  //     &tdat // data for callbacks
+  //     );
+  //
+  // // Extract information.
+  // ct_sweepAndMerge(ctx);
+  // ctBranch* root = ct_decompose(ctx);
+  // ct_cleanup(ctx);
+  //
+  // vector<int> nodes;
+  // set<double> unique_offsets;
+  // outputTree(root, &tdat, nodes, unique_offsets);
+  // Eigen::MatrixXd pts, pts_cols;
+  // Eigen::VectorXd pts_cols_i;
+  // pts.resize(nodes.size(), 3);
+  // pts_cols_i.resize(nodes.size());
+  // for (int i = 0; i < nodes.size(); ++i) {
+  //   pts.row(i) = TV.row(nodes[i]);
+  //   pts_cols_i(i) = H(nodes[i]);
+  // }
 
   vector<ConnectedComponent> unique_components;
 
   // Go through all offsets and generate surfaces.
   // for (double offset: unique_offsets) {
-  for (double offset = 0.2; offset < 1.0; offset += 0.3) {
+  for (double offset = 1.0; offset >= 0.1; offset -= 0.1) {
     Eigen::MatrixXd offsetV;
     Eigen::MatrixXi offsetF;
     Eigen::VectorXi offsetO;
 
     OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
-                                               offset,
-                                               offsetV, offsetF, offsetO);
+                                               offset, offsetV, offsetF, offsetO);
 
     vector<ConnectedComponent> components = getConnectedComponents(offsetV,
                                                                    offsetF,
