@@ -79,7 +79,7 @@ include_directories(${LIBIGL_INCLUDE_DIRS} ${LIBTOURTRE_INCLUDE_DIR})
 add_definitions(${LIBIGL_DEFINITIONS})
 
 ### Add your project files
-SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp")
+SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp;${CMAKE_CURRENT_LIST_DIR}/tiler_main.cpp;${CMAKE_CURRENT_LIST_DIR}/debug/debugger_main.cpp")
 message("Removing binary files ${BINARY_FILES}")
 FILE(GLOB SRCFILES *.cpp)
 LIST(REMOVE_ITEM SRCFILES ${BINARY_FILES})
@@ -100,4 +100,5 @@ target_link_libraries(tiler_main ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} $
 # Debugging runner for tiler_main (enter in tile stacks and check if valid).
 # From the build directory -
 #   $ make -j3 tiler_debugger && ./tiler_debugger < ../debug/tiler_debugger.in
-add_executable(tiler_debugger debug/tiler_debugger.cpp Tiler.cpp)
+add_executable(tiler_debugger debug/tiler_debugger.cpp ${SRCFILES})
+target_link_libraries(tiler_debugger ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})

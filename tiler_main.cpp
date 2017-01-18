@@ -48,7 +48,7 @@ Eigen::VectorXi tetM;
 Eigen::VectorXd H;
 
 // The tile falls into the same "bin" if they have the same parent connectivity.
-string terribleHashFunction (const Tile *tile) {
+string terribleHashFunction (Tile *tile) {
   vector<set<int> > connected = tile->getUpperConnected();
   sort(connected.begin(), connected.end());
 
@@ -233,20 +233,21 @@ int main(int argc, char *argv[]) {
     botM = topM;
 
     // For debugging.
-    //   for (Tile *tile : generated[level])
     if (generated[level].size() > 0) {
       Eigen::MatrixXd V;
       Eigen::MatrixXi F;
       Eigen::VectorXi O;
 
+      cout << "Saving a full tile for debugging." << endl;
+
       Tile *tile = generated[level].back();
 
       getTileMesh(tile, V, F, O, true);
-
-      if ((level - start) % 5 == 0)
-        viewTile(tile);
-
       igl::writeOFF("tile.off", V, F);
+
+      // if (level > start &&
+      //     ((level - start) % 8 == 0 || (level - start == num_slices - 1)))
+      //   viewTile(tile);
     }
   }
 

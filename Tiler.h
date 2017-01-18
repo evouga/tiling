@@ -22,10 +22,13 @@ struct Component {
 // A tile is a set of components that cover all upper and lower contours.
 struct Tile {
   // The tile that comes right before the current one.
-  const Tile *bottom_parent;
+  Tile *bottom_parent;
 
-  // TODO(bradyz): Needs a fixup.
-  bool isLast = false;
+  bool is_last = false;
+
+  // Used for get upper connected, since it is recursive.
+  bool cached_upper_connected = false;
+  std::vector<std::set<int> > upper_connected;
 
   // Contours to tile.
   const std::set<int> upper;
@@ -33,20 +36,24 @@ struct Tile {
   // Configuration of connections between contours and parent.
   std::vector<Component*> components;
 
-  // First tile constructor.
+  // Constructor for the starting level (no parents).
   Tile(const std::set<int> &upper_contours);
 
-  // Tile with parent constructor.
+  // Constructor for tiles that have parent constraints.
   Tile(const std::set<int> &upper_contours,
        const std::vector<std::set<int> > &components,
-       const Tile *parent);
+       Tile *parent, bool last);
 
-  bool isTopTile() { return this->isLast; }
-  bool isValid() const;
+  bool isTopTile() { return this->is_last; }
+  bool isValid();
 
-  // TODO(bradyz): get rid of this function.
-  std::vector<std::set<int> > getUpperConnected() const;
+  // Forms a graph depicting the current tile (includes parent connectivity.
+  std::map<int, std::vector<int> > getGraph();
 
+  // Each set says if the contours were ever connected (including parents).
+  std::vector<std::set<int> > getUpperConnected();
+
+  // Gets a full tile to the very bottom most parent.
   std::vector<Component*> getAllComponents() const;
 
   ~Tile();
@@ -62,10 +69,10 @@ std::ostream& operator<< (std::ostream &os, const Tile &tile);
  * Arguments:
  *  @param upper - upper contours to be covered.
  *  @param parent - can be NULL, the tile below.
- *  @param isLast - additional topology constraints on the last tile.
+ *  @param is_last - additional topology constraints on the last tile.
  */
-std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
-                                 bool isLast);
+std::vector<Tile*> generateTiles(const std::set<int> &upper, Tile *parent,
+                                 bool is_last);
 
 /**
  * Populates all valid configurations of connections.
@@ -75,11 +82,11 @@ std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
  *  @param upper - upper contours to be covered.
  *  @param parent - can be NULL, the tile below.
  *  @param components - pass in the possible sets in the cover.
- *  @param isLast - additional topology constraints on the last tile.
+ *  @param is_last - additional topology constraints on the last tile.
  */
-std::vector<Tile*> generateTiles(const std::set<int> &upper, const Tile *parent,
+std::vector<Tile*> generateTiles(const std::set<int> &upper, Tile *parent,
                                  const std::vector<std::set<int> > &components,
-                                 bool isLast);
+                                 bool is_last);
 
 /**
  * Combine all components and extract the surface of a tile.

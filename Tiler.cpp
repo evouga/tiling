@@ -312,7 +312,9 @@ vector<set<int> > generatePossibleSubsets(const set<int> &entire_set,
 namespace Tiler {
 
 Tile::Tile(const set<int> &upper_contours) :
-    bottom_parent(NULL), upper(upper_contours) {
+    bottom_parent(NULL),
+    upper(upper_contours),
+    is_last(false) {
   for (int x : upper_contours) {
     set<int> component;
     component.insert(x);
@@ -321,26 +323,51 @@ Tile::Tile(const set<int> &upper_contours) :
 }
 
 Tile::Tile(const set<int> &upper_contours, const vector<set<int> > &components,
-           const Tile *parent) :
+           Tile *parent, bool last) :
     bottom_parent(parent),
-    upper(upper_contours) {
+    upper(upper_contours),
+    is_last(last) {
   for (const set<int> &contours : components)
     this->components.push_back(new Component(contours));
 }
 
 // TODO(bradyz): The bug in cycles is here.
-vector<set<int> > Tile::getUpperConnected() const {
-  vector<set<int> > result;
-  for (const Component *component : this->components) {
-    set<int> component_upper;
-    for (int contour : component->contours_used) {
-      if (this->upper.find(contour) != this->upper.end())
-        component_upper.insert(contour);
+vector<set<int> > Tile::getUpperConnected() {
+  // The first slice is all disjoint.
+  if (this->bottom_parent == NULL) {
+    for (int x : this->upper) {
+      set<int> component;
+      component.insert(x);
+      this->upper_connected.push_back(component);
     }
-    if (component_upper.size() > 0)
-      result.push_back(component_upper);
+
+    // Save for future use (I think the term is "thunking").
+    this->cached_upper_connected = true;
+    return this->upper_connected;
   }
-  return result;
+
+  // Save some recursive calls.
+  if (this->cached_upper_connected)
+    return this->upper_connected;
+
+  map<int, vector<int> > graph = this->getGraph();
+  vector<vector<int> > connectedComponents = getConnectedComponents(graph);
+
+  for (const vector<int> &component : connectedComponents) {
+    set<int> component_upper;
+
+    for (int u : component) {
+      if (this->upper.find(u) != this->upper.end())
+        component_upper.insert(u);
+    }
+
+    if (component_upper.size() > 0)
+      this->upper_connected.push_back(component_upper);
+  }
+
+  // Save the result.
+  this->cached_upper_connected = true;
+  return this->upper_connected;
 }
 
 vector<Component*> Tile::getAllComponents() const {
@@ -377,12 +404,52 @@ ostream& operator<< (ostream &os, const Tile &tile) {
   return os;
 }
 
-bool Tile::isValid() const {
+bool Tile::isValid() {
   if (this->bottom_parent == NULL)
     return true;
 
+  map<int, vector<int> > graph = this->getGraph();
+  vector<vector<int> > connectedComponents = getConnectedComponents(graph);
+
+  bool is_valid = true;
+
+  // The contours must not form any cycles.
+  is_valid &= isForest(graph);
+
+  // The bottom and top must be connected in at least one point.
+  is_valid &= isConnected(this->upper, bottom_parent->upper, connectedComponents);
+
+  // When the tile is done, there must be only one connected component.
+  is_valid &= (!this->is_last || (connectedComponents.size() == 1));
+
+  // cout << "graph: " << endl;
+  // cout << graphToString(graph) << endl;
+
+  return is_valid;
+}
+
+map<int, vector<int> > Tile::getGraph() {
+  // Outputs an undirected graph that points from bottom to top.
+  // For example, if the bottom has {1}, and the top has {2, 3},
+  // and there is one connected component {1, 2, 3},
+  // the graph would look like the following -
+  //
+  // 2   3
+  //  \ /
+  // 1000
+  //   |
+  //   1
+
   map<int, vector<int> > graph;
-  const Tile* parent = this->bottom_parent;
+
+  // There are no edges in the bottom most tile.
+  if (this->bottom_parent == NULL) {
+    for (int u : this->upper)
+      graph[u] = vector<int>();
+    return graph;
+  }
+
+  Tile* parent = this->bottom_parent;
 
   // Add new edges from components in tile.
   // 1*** means connected in the current layer.
@@ -415,17 +482,7 @@ bool Tile::isValid() const {
     dummy_node++;
   }
 
-  vector<vector<int> > connectedComponents = getConnectedComponents(graph);
-
-  bool is_valid = true;
-  is_valid &= isForest(graph);
-  is_valid &= isConnected(this->upper, bottom_parent->upper, connectedComponents);
-  is_valid &= (!this->isLast || (connectedComponents.size() == 1));
-
-  // cout << "graph: " << endl;
-  // cout << graphToString(graph) << endl;
-
-  return is_valid;
+  return graph;
 }
 
 Tile::~Tile() {
@@ -433,8 +490,8 @@ Tile::~Tile() {
     delete comp;
 }
 
-vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
-                            bool isLast) {
+vector<Tile*> generateTiles(const set<int> &upper, Tile *parent,
+                            bool is_last) {
   vector<Tile*> result;
 
   // Bottom tile.
@@ -455,8 +512,7 @@ vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
 
   // Go through all possible tilings and find ones with no loops.
   for (const vector<set<int> > &tiling : possible) {
-    Tile *tile = new Tile(upper, tiling, parent);
-    tile->isLast = isLast;
+    Tile *tile = new Tile(upper, tiling, parent, is_last);
 
     // Get rid of the tile if it's no good.
     if (tile->isValid())
@@ -469,8 +525,8 @@ vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
 }
 
 // Use this function to pass in valid components used in the cover.
-vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
-                            const vector<set<int> > &components, bool isLast) {
+vector<Tile*> generateTiles(const set<int> &upper, Tile *parent,
+                            const vector<set<int> > &components, bool is_last) {
   vector<Tile*> result;
 
   // Bottom tile.
@@ -487,8 +543,8 @@ vector<Tile*> generateTiles(const set<int> &upper, const Tile *parent,
 
   // Go through all possible tilings and find ones with no loops.
   for (const vector<set<int> > &tiling : possible) {
-    Tile *tile = new Tile(upper, tiling, parent);
-    tile->isLast = isLast;
+    Tile *tile = new Tile(upper, tiling, parent, is_last);
+    tile->is_last = is_last;
 
     // Get rid of the tile if it's no good.
     if (tile->isValid())

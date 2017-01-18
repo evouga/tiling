@@ -20,21 +20,21 @@ using namespace Tiler;
 
 int levels;
 
-Tile *readTile(Tile *parent) {
+Tile *readTile(Tile *parent, bool is_last) {
   int n;
   string buffer;
 
   getline(cin, buffer);
+  stringstream ss(buffer);
 
   set<int> upper;
-  stringstream ss(buffer);
   while (ss >> n)
     upper.insert(n);
 
   cin >> n;
   getline(cin, buffer);
 
-  vector<Component*> components;
+  vector<set<int> > components;
   for (int i = 0; i < n; i++) {
     getline(cin, buffer);
     ss = stringstream(buffer);
@@ -43,27 +43,28 @@ Tile *readTile(Tile *parent) {
     int contour_id;
     while (ss >> contour_id)
       comp.insert(contour_id);
-    components.push_back(new Component(comp));
+
+    components.push_back(comp);
   }
 
-  Tile *tile = new Tile(upper);
-  tile->components = components;
-
-  return tile;
+  return new Tile(upper, components, parent, is_last);
 }
 
 int main() {
+  cout << "asdf" << endl;
   cin >> levels;
+
+  // Burn off trailing newline.
   string buffer;
   getline(cin, buffer);
 
   // Parse in all the tiles.
   Tile **tiles = new Tile*[levels];
-  for (int i = levels-1; i >= 0; i--) {
-    tiles[i] = readTile(NULL);
-    if (i != levels-1)
-      tiles[i+1]->bottom_parent = tiles[i];
-  }
+
+  tiles[0] = readTile(NULL, false);
+
+  for (int i = 1; i < levels; i++)
+    tiles[i] = readTile(tiles[i-1], (i == levels-1));
 
   cout << *tiles[levels-1] << endl;
   cout << "is valid: " << tiles[levels-1]->isValid() << endl;
