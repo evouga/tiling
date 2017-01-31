@@ -166,24 +166,32 @@ ConnectedComponent::ConnectedComponent(double offset,
 }
 
 void dfs(int vertex_index, set<int> &visited, set<int> &vertices_used,
-         const Eigen::MatrixXi &F) {
-  for (int i = 0; i < F.rows(); i++) {
-    bool explore = false;
-    for (int j = 0; j < F.cols(); j++)
-      explore |= (F(i, j) == vertex_index);
-    if (!explore)
+         const map<int, vector<int> > &graph) {
+  for (int neighbor_vertex : graph.at(vertex_index)) {
+    if (visited.find(neighbor_vertex) != visited.end())
       continue;
 
-    for (int j = 0; j < F.cols(); j++) {
-      int neighbor_vertex = F(i, j);
-      if (visited.find(neighbor_vertex) != visited.end())
-        continue;
+    visited.insert(neighbor_vertex);
+    vertices_used.insert(neighbor_vertex);
+    dfs(neighbor_vertex, visited, vertices_used, graph);
+  }
+}
 
-      visited.insert(neighbor_vertex);
-      vertices_used.insert(neighbor_vertex);
-      dfs(neighbor_vertex, visited, vertices_used, F);
+map<int, vector<int> > getGraphFromFaces(const Eigen::MatrixXi &F) {
+  map<int, vector<int> > graph;
+
+  for (int i = 0; i < F.rows(); i++) {
+    for (int j = 0; j < 3; j++) {
+      for (int k = j+1; k < 3; k++) {
+        int u = F(i, j);
+        int v = F(i, k);
+        graph[u].push_back(v);
+        graph[v].push_back(u);
+      }
     }
   }
+
+  return graph;
 }
 
 vector<ConnectedComponent> getConnectedComponents(const Eigen::MatrixXd &V,
@@ -191,6 +199,7 @@ vector<ConnectedComponent> getConnectedComponents(const Eigen::MatrixXd &V,
                                                   const Eigen::VectorXi &O,
                                                   double offset) {
   vector<ConnectedComponent> components;
+  map<int, vector<int> > graph = getGraphFromFaces(F);
 
   set<int> visited;
   for (int i = 0; i < V.rows(); i++) {
@@ -199,7 +208,7 @@ vector<ConnectedComponent> getConnectedComponents(const Eigen::MatrixXd &V,
     visited.insert(i);
 
     set<int> vertices_used;
-    dfs(i, visited, vertices_used, F);
+    dfs(i, visited, vertices_used, graph);
     components.push_back(ConnectedComponent(offset, V, F, O, vertices_used));
   }
 

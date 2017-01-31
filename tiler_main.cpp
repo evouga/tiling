@@ -245,9 +245,9 @@ int main(int argc, char *argv[]) {
       getTileMesh(tile, V, F, O, true);
       igl::writeOFF("tile.off", V, F);
 
-      // if (level > start &&
-      //     ((level - start) % 8 == 0 || (level - start == num_slices - 1)))
-      //   viewTile(tile);
+      if (level > start &&
+          ((level - start) % 5 == 0 || (level - start == num_slices - 1)))
+        viewTile(tile);
     }
   }
 
