@@ -88,66 +88,15 @@ void viewTile(Tile *tile) {
   Helpers::viewTriMesh(V, F, M);
 }
 
-// NOTE: the tet-mesh should be created before calling this function.
-ConnectedComponent componentFromContours(SliceStack &ss,
-                                         const set<int> &contours_allowed) {
-  ss.computeLaplace(tetV, tetT, tetF, tetM, H, contours_allowed);
-
-  vector<ConnectedComponent> ccs = allPossibleTiles(tetV, tetF, tetT, tetM, H);
-
-  if (ccs.size() == 0)
-    cout << "not found" << endl;
-
-  ConnectedComponent result = ccs[0];
-  double result_score = -1.0;
-
-  // TODO(bradyz): find a scoring mechanism.
-  for (const ConnectedComponent &cc : ccs) {
-    if (cc.contours_used == contours_allowed) {
-      result = cc;
-      result_score = 1.0;
-    }
-  }
-
-  // TODO: throw a more detailed exception.
-  if (result_score < 0.0) {
-    cout << "not found" << endl;
-    return ccs[1000];
-  }
-
-  return result;
-}
-
-// The map should contain a mapping from contours used to the components
-// that have this topology.
-void populateComponentMeshes(const map<set<int>, vector<Component*> > &mapping,
-                             SliceStack &ss) {
-  cout << "Generating meshes for " << mapping.size() << " components." << endl;
-
-  for (auto it : mapping) {
-    ConnectedComponent tmp = componentFromContours(ss, it.first);
-
-    for (Component *component : it.second) {
-      component->V = tmp.V;
-      component->F = tmp.F;
-      component->M = tmp.M;
-    }
-  }
-}
-
-vector<set<int> > getHeatFlowValidComponents(SliceStack &ss, int level) {
+map<set<int>, ConnectedComponent> getHeatFlowValidComponents(SliceStack &ss,
+                                                             int level) {
   ss.triangulateSlice(level, GLOBAL::TRI_AREA,
                       botV, botF, topV, topF, botM, topM);
   ss.tetrahedralizeSlice(botV, botF, topV, topF,
                          botM, topM, tetV, tetT, tetF, tetM);
   ss.computeLaplace(tetV, tetT, tetF, tetM, H);
 
-  vector<set<int> > result;
-
-  for (const ConnectedComponent &cc : allPossibleTiles(tetV, tetF, tetT, tetM, H))
-    result.push_back(cc.contours_used);
-
-  return result;
+  return possibleTileMap(tetV, tetF, tetT, tetM, H);
 }
 
 int main(int argc, char *argv[]) {
@@ -168,14 +117,18 @@ int main(int argc, char *argv[]) {
     cout << "Level: " << level << endl;
     cout << "Contours: " << ss.getSizeAt(level) << endl;
 
-    vector<set<int> > components = getHeatFlowValidComponents(ss, level);
+    // Map from contours used to ConnectedComponent mesh.
+    map<set<int>, ConnectedComponent> contours_to_component;
+    contours_to_component = getHeatFlowValidComponents(ss, level);
+
+    vector<set<int> > components;
+    for (auto it : contours_to_component)
+      components.push_back(it.first);
+
     set<int> upper = ss.getContoursAt(level+1);
 
     // All nonunique tiles generated on this level.
     vector<Tile*> current_level_tiles;
-
-    // Used to give each component the actual mesh.
-    map<set<int>, vector<Component*> > contours_to_component;
 
     cout << "Generating tiles via exact set cover." << endl;
 
@@ -185,17 +138,19 @@ int main(int argc, char *argv[]) {
 
       // Do exact set cover and get all possible ways to cover.
       for (Tile *tile : Tiler::generateTiles(upper, parent, components, last)) {
-        for (Component *component : tile->components)
-          contours_to_component[component->contours_used].push_back(component);
+
+        // Go through component add attach the mesh.
+        for (Component *component : tile->components) {
+          component->V = contours_to_component[component->contours_used].V;
+          component->F = contours_to_component[component->contours_used].F;
+          component->M = contours_to_component[component->contours_used].M;
+        }
 
         current_level_tiles.push_back(tile);
       }
     }
 
     cout << "Total tiles generated: " << current_level_tiles.size() << endl;
-
-    // Generate mesh for each component.
-    populateComponentMeshes(contours_to_component, ss);
 
     map<string, Tile*> best_tiles;
 
@@ -240,14 +195,14 @@ int main(int argc, char *argv[]) {
 
       cout << "Saving a full tile for debugging." << endl;
 
-      Tile *tile = generated[level].back();
-
-      getTileMesh(tile, V, F, O, true);
+      getTileMesh(generated[level].back(), V, F, O, true);
       igl::writeOFF("tile.off", V, F);
 
       if (level > start &&
-          ((level - start) % 5 == 0 || (level - start == num_slices - 1)))
-        viewTile(tile);
+          ((level - start) % 10 == 0 || (level - start == num_slices - 1))) {
+        for (Tile *tile : generated[level])
+          viewTile(tile);
+      }
     }
   }
 

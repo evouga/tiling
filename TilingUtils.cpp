@@ -290,4 +290,34 @@ vector<ConnectedComponent> allPossibleTiles(
   return unique_components;
 }
 
+map<set<int>, ConnectedComponent> possibleTileMap(
+    const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF,
+    const Eigen::MatrixXi &TT, const Eigen::VectorXi &TO,
+    const Eigen::VectorXd &H) {
+  map<set<int>, ConnectedComponent> result;
+
+  // Go through all offsets and generate surfaces.
+  for (double offset = 0.1; offset <= 1.0; offset += 0.1) {
+    Eigen::MatrixXd offsetV;
+    Eigen::MatrixXi offsetF;
+    Eigen::VectorXi offsetO;
+
+    OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
+                                               offset, offsetV, offsetF, offsetO);
+
+    vector<ConnectedComponent> components = getConnectedComponents(offsetV,
+                                                                   offsetF,
+                                                                   offsetO,
+                                                                   offset);
+
+    // Many components have similar topologies - pick the ones not found yet.
+    for (ConnectedComponent &component : components) {
+      if (result.find(component.contours_used) == result.end())
+        result[component.contours_used] = component;
+    }
+  }
+
+  return result;
+}
+
 } // namespace TilingUtils

@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <set>
+#include <map>
 
 #include <Eigen/Core>
 
@@ -15,6 +16,8 @@ struct ConnectedComponent {
 
   double offsetVal;
   std::set<int> contours_used;
+
+  ConnectedComponent() : offsetVal(-1.0) { };
 
   ConnectedComponent(double offset,
                      const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
@@ -106,6 +109,23 @@ std::set<int> getContoursUsed(const ConnectedComponent &component,
  * @param H - heat values for each vertex in TV
  */
 std::vector<ConnectedComponent> allPossibleTiles(
+    const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
+    const Eigen::VectorXi &TO, const Eigen::VectorXd &H);
+
+/**
+ * Will extract all possible Connected Components based off of heat values of
+ * a given tet-mesh (3d).
+ * Similar to allPossibleTiles, but is a mapping from contours_used to the
+ * actual connected component which holds the mesh.
+ *
+ * Arguments are:
+ * @param TV - vertices of tet-mesh
+ * @param TF - faces of tet-mesh
+ * @param TT - tets of tet-mesh
+ * @param TO - original markers list
+ * @param H - heat values for each vertex in TV
+ */
+std::map<std::set<int>, ConnectedComponent> possibleTileMap(
     const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TF, const Eigen::MatrixXi &TT,
     const Eigen::VectorXi &TO, const Eigen::VectorXd &H);
 
