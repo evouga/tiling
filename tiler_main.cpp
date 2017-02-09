@@ -67,9 +67,14 @@ double energy (Tile *tile) {
   Eigen::VectorXi O;
   getTileMesh(tile, V, F, O, false);
 
+  /*
   // Genus computation.
-  if ((V.rows() - 0.5 * F.rows() - 2) / 2 != 0)
+  double genus = (V.rows() - 0.5 * F.rows() - 2.0) / -2.0;
+  if (genus != 0) {
+    printf("Error: genus is %lf\n", genus);
     return INFINITY;
+  }
+  */
 
   Eigen::MatrixXd unused;
   double score = biharmonic(V, F, O, unused);
@@ -160,6 +165,8 @@ int main(int argc, char *argv[]) {
     for (Tile *tile : current_level_tiles) {
       // Want to save the best from each unique parent connectivity.
       string tile_id = terribleHashFunction(tile);
+      //printf("Tile we're working on is id is [%s]\n", tile_id.c_str());
+      //printf("Energy is %lf\n", energy(tile));
 
       if (best_tiles.find(tile_id) == best_tiles.end()) {
         best_tiles[tile_id] = tile;
@@ -168,12 +175,15 @@ int main(int argc, char *argv[]) {
         // Find the one with lower energy.
         double e1 = energy(tile);
         double e2 = energy(best_tiles[tile_id]);
+        //printf("my energy is %lf vs previous %lf\n", e1, e2);
 
         if (e1 < e2) {
           delete best_tiles[tile_id];
           best_tiles[tile_id] = tile;
         }
       }
+      //viewTile(tile);
+
     }
 
     // Populate the current level generated with the best tiles.
@@ -198,6 +208,12 @@ int main(int argc, char *argv[]) {
 
       getTileMesh(generated[level].back(), V, F, O, true);
       igl::writeOFF("tile.off", V, F);
+      // Also write the original vertices
+      FILE* of = fopen("tile_orig.txt", "w");
+      for (int i = 0; i < O.rows(); ++i) {
+        fprintf(of, "%d\n", O(i));
+      }
+      fclose(of);
 
       if (level > start &&
           ((level - start) % 10 == 0 || (level - start == num_slices - 1))) {

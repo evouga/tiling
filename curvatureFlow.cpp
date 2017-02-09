@@ -91,7 +91,7 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   Eigen::SparseMatrix<double> L;
   igl::cotmatrix(V,F,L);
 
-  biharmonic(V, F, orig, L, Vc, change_val, remove_interior);
+  return biharmonic(V, F, orig, L, Vc, change_val, remove_interior);
 }
 
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,

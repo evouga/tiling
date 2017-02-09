@@ -313,10 +313,19 @@ map<set<int>, ConnectedComponent> possibleTileMap(
     vector<ConnectedComponent> components = 
         getConnectedComponents(offsetV, offsetF, offsetO, offset);
 
+    //printf("At offset %lf, here's the comp\n", offset);
     // Many components have similar topologies - pick the ones not found yet.
     for (ConnectedComponent &component : components) {
+      /*
+      printf("Used: ");
+      for (auto s : component.contours_used) {
+        printf("%d ", s);
+      }
+      printf("\n");
+      */
       if (result.find(component.contours_used) == result.end()) {
         result[component.contours_used] = component;
+        //Helpers::viewTriMesh(offsetV, offsetF, offsetO);
       }
     }
   }

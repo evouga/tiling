@@ -181,6 +181,22 @@ void generateOffsetSurface(const Eigen::MatrixXd &V,
   generateOffsetSurface(T, off, Voff, Foff);
 }
 
+bool fitsOffset(int idx, double off, const Eigen::MatrixXi TT, const Eigen::VectorXd C) {
+  for (int i = 0; i < TT.cols(); ++i) {
+    if (C(TT(idx, i)) > off) {
+      return false;
+    }
+  }
+  return true;
+}
+bool hasOriginal(int idx, const Eigen::MatrixXi &TT, const Eigen::VectorXi &TO) {
+  for (int i = 0; i < TT.cols(); ++i) {
+    if (TO(TT(idx, i)) != GLOBAL::nonoriginal_marker) {
+      return true;
+    }
+  }
+  return false;
+}
 void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  const Eigen::MatrixXi &TT,
                                  const Eigen::VectorXi &TO,
@@ -188,8 +204,8 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff) {
   std::vector<int> s;
   for (int i = 0; i < TT.rows(); ++i) {
-    if (C(TT(i, 0)) <= off && C(TT(i, 1)) <= off &&
-        C(TT(i, 2)) <= off && C(TT(i, 3)) <= off) {
+    if (fitsOffset(i, off, TT, C) ||
+        hasOriginal(i, TT, TO)) {
       s.push_back(i);
     }
   }
