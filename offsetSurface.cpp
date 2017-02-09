@@ -181,7 +181,7 @@ void generateOffsetSurface(const Eigen::MatrixXd &V,
   generateOffsetSurface(T, off, Voff, Foff);
 }
 
-bool fitsOffset(int idx, double off, const Eigen::MatrixXi TT, const Eigen::VectorXd C) {
+bool fitsOffset(int idx, double off, const Eigen::MatrixXi &TT, const Eigen::VectorXd &C) {
   for (int i = 0; i < TT.cols(); ++i) {
     if (C(TT(idx, i)) > off) {
       return false;
@@ -197,6 +197,14 @@ bool hasOriginal(int idx, const Eigen::MatrixXi &TT, const Eigen::VectorXi &TO) 
   }
   return false;
 }
+bool hasBoundary(int idx, const Eigen::MatrixXi &TT, const Eigen::VectorXd &C) {
+  for (int i = 0; i < TT.cols(); ++i) {
+    if (C(TT(idx, i)) == GLOBAL::outside_temp) {
+      return true;
+    }
+  }
+  return false;
+}
 void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  const Eigen::MatrixXi &TT,
                                  const Eigen::VectorXi &TO,
@@ -204,8 +212,10 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff) {
   std::vector<int> s;
   for (int i = 0; i < TT.rows(); ++i) {
+    // Either all tet corners are within the offset
+    // or there is an original vertex and no boundary (outside_temp) vertices
     if (fitsOffset(i, off, TT, C) ||
-        hasOriginal(i, TT, TO)) {
+        (hasOriginal(i, TT, TO) && !hasBoundary(i, TT, C))) {
       s.push_back(i);
     }
   }

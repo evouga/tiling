@@ -4,7 +4,7 @@
 #include <igl/orient_outward.h>
 #include <igl/readOFF.h>
 #include <igl/readPLY.h>
-#include <igl/Viewer/viewer.h>
+#include <igl/viewer/Viewer.h>
 
 #include "glob_defs.h"
 #include "curvatureFlow.h"
@@ -104,15 +104,23 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+  igl::viewer::Viewer v;
+  Eigen::MatrixXd cols;
+  igl::jet(C, true, cols);
+  v.data.set_mesh(V, F);;
+  v.data.set_colors(cols);
+  v.launch();
 
-  //biharmonic_view(V, F, C, Vc, true);
-  biharmonic(V, F, C, Vc, true);
+  biharmonic_view(V, F, C, Vc, true);
+  //biharmonic(V, F, C, Vc, true);
   //computeCurvatureFlow(V, F, C, 0.1, Vc);
   
+  /*
   igl::viewer::Viewer v;
   Eigen::MatrixXd cols;
   igl::jet(C, true, cols);
   v.data.set_mesh(Vc, F);;
   v.data.set_colors(cols);
   v.launch();
+  */
 }

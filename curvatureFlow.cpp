@@ -222,7 +222,7 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   printf("  Close down image to return shape to previous function\n");
   v.data.set_mesh(Vc, F);
   Eigen::MatrixXd cols;
-  igl::jet(new_orig, true, cols);
+  igl::jet(orig, true, cols);
   v.data.set_vertices(Vc);
   v.data.set_colors(cols);
   v.launch();

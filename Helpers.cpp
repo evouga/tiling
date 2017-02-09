@@ -40,7 +40,13 @@ void removeDuplicates(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
   for (int old_i = 0; old_i < M.rows(); ++old_i) {
     int new_i = toUnique(old_i);
     // A non-original marker can be merged into an original one.
-    fixedM(new_i) = max(fixedM(new_i), M(old_i));
+    if (fixedM(new_i) == 0 || fixedM(new_i) == GLOBAL::nonoriginal_marker) {
+      fixedM(new_i) = M(old_i);
+    } else {
+      // If the previous is not a non-original marker, then just set it to
+      // be the minimum of the previous two.
+      fixedM(new_i) = min(fixedM(new_i), M(old_i));
+    }
   }
 
   if (GLOBAL::DEBUG) {
@@ -172,8 +178,10 @@ void combineMesh(const vector<Eigen::MatrixXd> &Vs,
                  const vector<Eigen::MatrixXi> &Fs,
                  const vector<Eigen::VectorXi> &Ms,
                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M) {
+  // Vectors should all be the same length.
   assert(Vs.size() == Fs.size());
   assert(Vs.size() == Ms.size());
+
 
   int total_vertices = 0;
   int total_faces = 0;
