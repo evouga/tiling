@@ -12,6 +12,7 @@
 #include <igl/copyleft/cgal/complex_to_mesh.h>
 #include <igl/exterior_edges.h>
 #include <igl/in_element.h>
+#include <igl/unique.h>
 
 #include "glob_defs.h"
 

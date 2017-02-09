@@ -1,12 +1,14 @@
 #include "curvatureFlow.h"
 
+#include <iostream> // cout
+
 #include <igl/barycenter.h>
 #include <igl/boundary_facets.h>
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
+#include <igl/harmonic.h>
 #include <igl/invert_diag.h>
 #include <igl/jet.h>
-#include <igl/harmonic.h>
 #include <igl/massmatrix.h>
 #include <igl/setdiff.h>
 #include <igl/slice.h>
@@ -86,6 +88,16 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                   const Eigen::VectorXi &orig,
                   Eigen::MatrixXd &Vc, double change_val,
                   bool remove_interior) {
+  Eigen::SparseMatrix<double> L;
+  igl::cotmatrix(V,F,L);
+
+  biharmonic(V, F, orig, L, Vc, change_val, remove_interior);
+}
+
+double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                  const Eigen::VectorXi &orig, const Eigen::SparseMatrix<double> &L,
+                  Eigen::MatrixXd &Vc, double change_val,
+                  bool remove_interior) {
   // First thing we need to do: remove interior vertices
   Eigen::VectorXi new_orig = orig;
   if (remove_interior) {
@@ -97,8 +109,7 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // The positions of these indices are held constant (just keep the input values)
   Eigen::MatrixXd V_bc = igl::slice(V, b, 1);
 
-  Eigen::SparseMatrix<double> L, M;
-  igl::cotmatrix(V,F,L);
+  Eigen::SparseMatrix<double> M;
   igl::massmatrix(V,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
 
   // Initialize Vc with input vertices V

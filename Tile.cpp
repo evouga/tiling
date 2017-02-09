@@ -177,7 +177,8 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
   ss << "QDa" << areaBound << "q";
 
   MatrixXd V2;
-  igl::triangle::triangulate(V, E, H, VM, EM, ss.str().c_str(), V2, faces, orig);
+  VectorXi EM2;
+  igl::triangle::triangulate(V, E, H, VM, EM, ss.str(), V2, faces, orig, EM2);
 
   verts.resize(V2.rows(), 3);
   flood_fill(faces, orig);

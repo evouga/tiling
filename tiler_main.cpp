@@ -74,7 +74,7 @@ double energy (Tile *tile) {
   Eigen::MatrixXd unused;
   double score = biharmonic(V, F, O, unused);
 
-  if (isnan(score))
+  if (std::isnan(score))
     return INFINITY;
 
   return score;
@@ -118,8 +118,8 @@ int main(int argc, char *argv[]) {
     cout << "Contours: " << ss.getSizeAt(level) << endl;
 
     // Map from contours used to ConnectedComponent mesh.
-    map<set<int>, ConnectedComponent> contours_to_component;
-    contours_to_component = getHeatFlowValidComponents(ss, level);
+    map<set<int>, ConnectedComponent> contours_to_component =
+        getHeatFlowValidComponents(ss, level);
 
     vector<set<int> > components;
     for (auto it : contours_to_component)
@@ -177,8 +177,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Populate the current level generated with the best tiles.
-    for (auto map_it : best_tiles)
+    for (auto map_it : best_tiles) {
       generated[level].push_back(map_it.second);
+    }
 
     cout << "Valid tiles: " << generated[level].size() << endl;
 

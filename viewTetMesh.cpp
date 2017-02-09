@@ -7,6 +7,7 @@
 #include <igl/copyleft/marching_cubes.h>
 #include <igl/jet.h>
 #include <igl/viewer/Viewer.h>
+#include <nanogui/formhelper.h>
 
 #include "offsetSurface.h"
 #include "glob_defs.h"

@@ -1,6 +1,7 @@
 #include "Helpers.h"
-#include "glob_defs.h"
+
 #include "curvatureFlow.h"
+#include "glob_defs.h"
 
 #include <iostream>
 #include <cstdio>
@@ -10,6 +11,7 @@
 
 #include <igl/collapse_small_triangles.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
+#include <igl/cotmatrix.h>
 #include <igl/jet.h>
 #include <igl/remove_duplicates.h>
 #include <igl/remove_unreferenced.h>
@@ -76,7 +78,9 @@ void tetrahedralize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   sprintf(buffer, "Qpq%fY", GLOBAL::TET_RATIO);
 
   // This prints out a number for some reason.
+  printf("[%s:%u] The igl tetrahedralize function produces this output: ", __FILE__, __LINE__);
   igl::copyleft::tetgen::tetrahedralize(V, F, VM, FM, buffer, TV, TT, TF, TO);
+  printf("\n");
 
   // Tetgen has some weird markers it introduces. Make them all either
   // original or nonoriginal.
@@ -127,18 +131,27 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   Eigen::MatrixXd C;
   igl::jet(M, true, C);
 
-  Eigen::MatrixXd V_biharmonic;
-  Eigen::MatrixXi F_biharmonic;
+  Eigen::MatrixXd V_biharmonic = V;
+  Eigen::MatrixXi F_biharmonic = F;
+  Eigen::SparseMatrix<double> L;
+  igl::cotmatrix(V,F,L);
 
   v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
     if (key == ' ') {
-      biharmonic(V, F, M, V_biharmonic);
-      igl::collapse_small_triangles(V_biharmonic, F, 1e-6, F_biharmonic);
-
+      biharmonic(V_biharmonic, F_biharmonic, M, L, V_biharmonic);
+      //igl::collapse_small_triangles(V_biharmonic, F, 1e-6, F_biharmonic);
+      printf("Finished biharmonic\n");
       resetView(v, V_biharmonic, F_biharmonic, M, C);
     }
     else if (key == 'R') {
-      resetView(v, V, F, M, C);
+      printf("Resetting matrices\n");
+      igl::cotmatrix(V, F, L);
+      V_biharmonic = V;
+      F_biharmonic = F;
+      resetView(v, V_biharmonic, F_biharmonic, M, C);
+    } else if (key == 'B') {
+      printf("Resetting laplacian matrix\n");
+      igl::cotmatrix(V,F,L);
     }
     return true;
   };
@@ -147,6 +160,10 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
   // Getting random segfaults. Write it to see if it is a mesh problem.
   igl::writeOFF("mesh.off", V, F);
+
+  printf("  Press ' ' (space) to compute biharmonic\n");
+  printf("  Press 'R' to reset the vertices back to original\n");
+  printf("  Press 'B' to re-compute Laplacian matrix\n");
 
   v.launch();
 }

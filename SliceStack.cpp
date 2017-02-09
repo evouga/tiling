@@ -403,7 +403,6 @@ void SliceStack::tetrahedralizeSlice (
 	// TO will have the "" vertex markers
 
   Helpers::tetrahedralize(V, F, M, FM, TV, TT, TF, TO);
-
 }
 
 void SliceStack::computeLaplace(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT,

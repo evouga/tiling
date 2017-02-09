@@ -126,6 +126,7 @@ ConnectedComponent::ConnectedComponent(double offset,
                                        const Eigen::VectorXi &M,
                                        const set<int> &vertices_used) :
     offsetVal(offset) {
+  int numDropped = 0;
   // Get all the faces used by the vertices.
   set<int> faces_used;
   for (int i = 0; i < F.rows(); i++) {
@@ -134,6 +135,8 @@ ConnectedComponent::ConnectedComponent(double offset,
       use &= (vertices_used.find(F(i, j)) != vertices_used.end());
     if (use)
       faces_used.insert(i);
+    else
+      numDropped++;
   }
 
   // Fix to appropriate sizes.
@@ -167,12 +170,12 @@ ConnectedComponent::ConnectedComponent(double offset,
 
 void dfs(int vertex_index, set<int> &visited, set<int> &vertices_used,
          const map<int, vector<int> > &graph) {
+  vertices_used.insert(vertex_index);
   for (int neighbor_vertex : graph.at(vertex_index)) {
     if (visited.find(neighbor_vertex) != visited.end())
       continue;
 
     visited.insert(neighbor_vertex);
-    vertices_used.insert(neighbor_vertex);
     dfs(neighbor_vertex, visited, vertices_used, graph);
   }
 }
@@ -296,8 +299,10 @@ map<set<int>, ConnectedComponent> possibleTileMap(
     const Eigen::VectorXd &H) {
   map<set<int>, ConnectedComponent> result;
 
-  // Go through all offsets and generate surfaces.
-  for (double offset = 0.1; offset <= 1.0; offset += 0.1) {
+  // Go through all offsets and generate surfaces. Start with 1 and go to
+  // lower so we emphasize larger connected components.
+  //for (double offset = 0.1; offset <= 1.0; offset += 0.1) {
+  for (double offset = 0.9; offset >= 0.1; offset -= 0.1) {
     Eigen::MatrixXd offsetV;
     Eigen::MatrixXi offsetF;
     Eigen::VectorXi offsetO;
@@ -305,15 +310,35 @@ map<set<int>, ConnectedComponent> possibleTileMap(
     OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
                                                offset, offsetV, offsetF, offsetO);
 
-    vector<ConnectedComponent> components = getConnectedComponents(offsetV,
-                                                                   offsetF,
-                                                                   offsetO,
-                                                                   offset);
+    vector<ConnectedComponent> components = 
+        getConnectedComponents(offsetV, offsetF, offsetO, offset);
 
     // Many components have similar topologies - pick the ones not found yet.
     for (ConnectedComponent &component : components) {
-      if (result.find(component.contours_used) == result.end())
+      if (result.find(component.contours_used) == result.end()) {
         result[component.contours_used] = component;
+      }
+    }
+  }
+  // Maybe haven't created a single component. If so, get larger until we do.
+  double offset = 0.9;
+  while (result.size() < 1) {
+    // Get closer to 1 without ever getting there.
+    offset = (1 + offset) / 2;
+
+    Eigen::MatrixXd offsetV;
+    Eigen::MatrixXi offsetF;
+    Eigen::VectorXi offsetO;
+    
+    OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
+                                               offset, offsetV, offsetF, offsetO);
+
+    vector<ConnectedComponent> components = 
+        getConnectedComponents(offsetV, offsetF, offsetO, offset);
+    for (ConnectedComponent &component : components) {
+      if (result.find(component.contours_used) == result.end()) {
+        result[component.contours_used] = component;
+      }
     }
   }
 
