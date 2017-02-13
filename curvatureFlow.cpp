@@ -162,6 +162,7 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // Initialize Vc with input vertices V
   Vc = V;
 
+  int harmonic_idx = 2;
   igl::viewer::Viewer v;
   v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
     if (key == 'L') {
@@ -173,6 +174,15 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       Vc = V;
       v.data.set_vertices(V);
       return true;
+    } else if (key == '1') {
+      printf("Setting harmonic to be 1\n");
+      harmonic_idx = 1;
+    } else if (key == '1') {
+      printf("Setting harmonic to be 2\n");
+      harmonic_idx = 2;
+    } else if (key == '3') {
+      printf("Setting harmonic to be 3\n");
+      harmonic_idx = 3;
     } else if (key == ' ') {
       // Press spacebar to get the next version.
       
@@ -184,7 +194,7 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       // How much should we change by?
       Eigen::MatrixXd D;
       //Eigen::MatrixXd V_bc = igl::slice(Vc, b, 1);
-      igl::harmonic(L,M, b,V_bc, 2, D);
+      igl::harmonic(L,M, b,V_bc, harmonic_idx, D);
       //igl::harmonic(Vc,F, b,V_bc, 2, D);
 
       // Calculate the difference.
@@ -219,6 +229,7 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   printf("  Press ' ' (space) to deform shape progressively\n");
   printf("  Press 'L' to (re)compute the Laplacian\n");
   printf("  Press 'R' to reset the vertices\n");
+  printf("  Press 1,2,or 3 to use different versions of the harmonic.\n");
   printf("  Close down image to return shape to previous function\n");
   v.data.set_mesh(Vc, F);
   Eigen::MatrixXd cols;

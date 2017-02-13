@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
 
     C.resize(V.rows());
     C.setZero();
+    /*
     for (int i = 0; i < V.rows(); ++i) {
       bool original = false;
       for (int j = 0; j < 3; ++j) {
@@ -101,6 +102,48 @@ int main(int argc, char *argv[]) {
         C(i) = GLOBAL::original_marker;
       } else {
         C(i) = GLOBAL::nonoriginal_marker;
+      }
+    }
+    */
+    int fixed_idx = 0;
+    // Set the middle line (x = bar x) to be constant
+    Eigen::VectorXd avg = (mins + maxs) / 2.0;
+    printf("avg is %lf", avg(fixed_idx));
+    for (int i = 0; i < V.rows(); ++i) {
+      if (std::abs(V(i, fixed_idx) - avg(fixed_idx)) < 1e-1) {
+        C(i) = GLOBAL::original_marker;
+      } else {
+        C(i) = GLOBAL::nonoriginal_marker;
+      }
+    }
+    Eigen::VectorXi Cextra(C.rows());
+    Cextra.setZero();
+    // Let's make it two vertices
+    for (int i = 0; i < F.rows(); ++i) {
+      // If I've got a neighbor that's a marked vertex
+      bool marked = false;
+      Eigen::RowVector3d orig_r;
+      for (int j = 0; j < F.cols(); ++j) {
+        if (C(F(i, j)) == GLOBAL::original_marker) {
+          marked = true;
+          orig_r = V.row(F(i, j));
+          break;
+        }
+      }
+      // All vertices with X > marked are true.
+      if (marked) {
+        for (int j = 0; j < F.cols(); ++j) {
+          int idx = F(i, j);
+          if (V(idx, fixed_idx) > orig_r(fixed_idx)) {
+            Cextra(idx) = GLOBAL::original_marker;
+          }
+        }
+      }
+    }
+    // Add these to the mix
+    for (int i = 0; i < C.rows(); ++i) {
+      if (Cextra(i) != 0) {
+        C(i) = GLOBAL::original_marker;
       }
     }
   }
