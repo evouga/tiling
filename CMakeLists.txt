@@ -80,7 +80,7 @@ include_directories(${LIBIGL_INCLUDE_DIRS} ${LIBTOURTRE_INCLUDE_DIR})
 add_definitions(${LIBIGL_DEFINITIONS})
 
 ### Add your project files
-SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp;${CMAKE_CURRENT_LIST_DIR}/tiler_main.cpp;${CMAKE_CURRENT_LIST_DIR}/debug/debugger_main.cpp")
+SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp;${CMAKE_CURRENT_LIST_DIR}/tiler_main.cpp;${CMAKE_CURRENT_LIST_DIR}/debug/debugger_main.cpp;${CMAKE_CURRENT_LIST_DIR}/icoso_tile.cpp")
 message("Removing binary files ${BINARY_FILES}")
 FILE(GLOB SRCFILES *.cpp)
 LIST(REMOVE_ITEM SRCFILES ${BINARY_FILES})
@@ -93,6 +93,9 @@ target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRA
 
 add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_SOURCES} offsetSurface.cpp)
 target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+
+add_executable(test_icoso_tile icoso_tile.cpp  ${LIBIGL_EXTRA_SOURCES})
+target_link_libraries(test_icoso_tile ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 # Dynamic programming for correct topologies.
 add_executable(tiler_main tiler_main.cpp Tiler.cpp ${SRCFILES})

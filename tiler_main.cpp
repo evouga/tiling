@@ -85,11 +85,11 @@ double energy (Tile *tile) {
   return score;
 }
 
-void viewTile(Tile *tile) {
+void viewTile(Tile *tile, bool all_mesh = true) {
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   Eigen::VectorXi M;
-  getTileMesh(tile, V, F, M, true);
+  getTileMesh(tile, V, F, M, all_mesh);
   Helpers::viewTriMesh(V, F, M);
 }
 
@@ -165,24 +165,30 @@ int main(int argc, char *argv[]) {
     for (Tile *tile : current_level_tiles) {
       // Want to save the best from each unique parent connectivity.
       string tile_id = terribleHashFunction(tile);
-      //printf("Tile we're working on is id is [%s]\n", tile_id.c_str());
-      //printf("Energy is %lf\n", energy(tile));
+      printf("Tile we're working on is id is [%s]\n", tile_id.c_str());
+      printf("Energy is %lf\n", energy(tile));
 
       if (best_tiles.find(tile_id) == best_tiles.end()) {
+        printf("Empty, adding to slot\n");
         best_tiles[tile_id] = tile;
       }
       else {
         // Find the one with lower energy.
         double e1 = energy(tile);
         double e2 = energy(best_tiles[tile_id]);
-        //printf("my energy is %lf vs previous %lf\n", e1, e2);
-
         if (e1 < e2) {
+          printf("WON: my energy is %lf vs previous %lf\n", e1, e2);
+          viewTile(tile, true);
+          viewTile(best_tiles[tile_id], true);
+
           delete best_tiles[tile_id];
           best_tiles[tile_id] = tile;
+        } else {
+          printf("NOT CHANGED: my energy is %lf vs previous %lf\n", e1, e2);
+          viewTile(tile, true);
+          viewTile(best_tiles[tile_id], true);
         }
       }
-      //viewTile(tile);
 
     }
 
@@ -215,11 +221,11 @@ int main(int argc, char *argv[]) {
       }
       fclose(of);
 
-      if (level > start &&
-          ((level - start) % 10 == 0 || (level - start == num_slices - 1))) {
+      //if (level > start &&
+      //    ((level - start) % 10 == 0 || (level - start == num_slices - 1))) {
         for (Tile *tile : generated[level])
           viewTile(tile);
-      }
+      //}
     }
   }
 

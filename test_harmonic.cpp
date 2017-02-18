@@ -110,12 +110,13 @@ int main(int argc, char *argv[]) {
     Eigen::VectorXd avg = (mins + maxs) / 2.0;
     printf("avg is %lf", avg(fixed_idx));
     for (int i = 0; i < V.rows(); ++i) {
-      if (std::abs(V(i, fixed_idx) - avg(fixed_idx)) < 1e-1) {
+      if (std::abs(V(i, fixed_idx) - avg(fixed_idx)) < 1e-3) {
         C(i) = GLOBAL::original_marker;
       } else {
         C(i) = GLOBAL::nonoriginal_marker;
       }
     }
+    /*
     Eigen::VectorXi Cextra(C.rows());
     Cextra.setZero();
     // Let's make it two vertices
@@ -146,6 +147,7 @@ int main(int argc, char *argv[]) {
         C(i) = GLOBAL::original_marker;
       }
     }
+    */
   }
   igl::viewer::Viewer v;
   Eigen::MatrixXd cols;

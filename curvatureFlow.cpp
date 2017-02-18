@@ -135,9 +135,12 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   }
 
   // Calculate the energy.
+  Eigen::SparseMatrix<double> Lt;
+  igl::cotmatrix(Vc,F,Lt);
+  igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
   Eigen::SparseMatrix<double> Mi;
   igl::invert_diag(M, Mi);
-  return (Vc.transpose() * L * Mi * L * Vc).trace();
+  return (Vc.transpose() * Lt * Mi * Lt * Vc).trace();
 }
 
 // Previous function that allows one to view the biharmonic.
@@ -210,9 +213,12 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       Vc = D;
 
       // Calculate the energy.
-      Eigen::SparseMatrix<double> Mi;
-      igl::invert_diag(M,Mi);
-      auto en = (Vc.transpose() * L * Mi * L * Vc).trace();
+      Eigen::SparseMatrix<double> M_new, Mi, L_new;
+      igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M_new);
+      igl::invert_diag(M_new,Mi);
+      igl::cotmatrix(Vc,F,L_new);
+      auto en = (Vc.transpose() * L_new * Mi * L_new * Vc).trace();
+      // Energy needs to be computed on the new Laplacian matrix
       std::cout << "Energy is " << en << std::endl;
       
       // Set the colors.
