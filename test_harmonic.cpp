@@ -116,38 +116,40 @@ int main(int argc, char *argv[]) {
         C(i) = GLOBAL::nonoriginal_marker;
       }
     }
-    /*
-    Eigen::VectorXi Cextra(C.rows());
-    Cextra.setZero();
-    // Let's make it two vertices
-    for (int i = 0; i < F.rows(); ++i) {
-      // If I've got a neighbor that's a marked vertex
-      bool marked = false;
-      Eigen::RowVector3d orig_r;
-      for (int j = 0; j < F.cols(); ++j) {
-        if (C(F(i, j)) == GLOBAL::original_marker) {
-          marked = true;
-          orig_r = V.row(F(i, j));
-          break;
-        }
-      }
-      // All vertices with X > marked are true.
-      if (marked) {
+
+    bool do_extra = true;
+    if (do_extra) {
+      Eigen::VectorXi Cextra(C.rows());
+      Cextra.setZero();
+      // Let's make it two vertices
+      for (int i = 0; i < F.rows(); ++i) {
+        // If I've got a neighbor that's a marked vertex
+        bool marked = false;
+        Eigen::RowVector3d orig_r;
         for (int j = 0; j < F.cols(); ++j) {
-          int idx = F(i, j);
-          if (V(idx, fixed_idx) > orig_r(fixed_idx)) {
-            Cextra(idx) = GLOBAL::original_marker;
+          if (C(F(i, j)) == GLOBAL::original_marker) {
+            marked = true;
+            orig_r = V.row(F(i, j));
+            break;
+          }
+        }
+        // All vertices with X > marked are true.
+        if (marked) {
+          for (int j = 0; j < F.cols(); ++j) {
+            int idx = F(i, j);
+            if (V(idx, fixed_idx) > orig_r(fixed_idx)) {
+              Cextra(idx) = GLOBAL::original_marker;
+            }
           }
         }
       }
-    }
-    // Add these to the mix
-    for (int i = 0; i < C.rows(); ++i) {
-      if (Cextra(i) != 0) {
-        C(i) = GLOBAL::original_marker;
+      // Add these to the mix
+      for (int i = 0; i < C.rows(); ++i) {
+        if (Cextra(i) != 0) {
+          C(i) = GLOBAL::original_marker;
+        }
       }
     }
-    */
   }
   igl::viewer::Viewer v;
   Eigen::MatrixXd cols;

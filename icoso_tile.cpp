@@ -7,18 +7,13 @@
 // Pseudocode copied from http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
 //
 
-const double EPS = 1e-6;
 
 struct cmpVectors {
-  bool operator()(const std::vector<double> &a, const std::vector<double> &b) {
-    if (std::abs(a[0] - b[0]) > EPS) {
-      return a[0] - b[0];
-    }
-    if (std::abs(a[1] - b[1]) > EPS) {
-      return a[1] - b[1];
-    }
-    
-    return abs(a[2] - b[2]) > EPS;
+  double EPS = 1e-8;
+  bool operator()(const std::vector<double> &a, const std::vector<double> &b) const {
+    if (a[0] != b[0]) return a[0] < b[0];
+    if (a[1] != b[1]) return a[1] < b[1];
+    return a[2] < b[2];
   }
 };
 std::map<std::vector<double>, int, cmpVectors> m_usedPoints;
@@ -29,13 +24,14 @@ double m_ConstantSize = 1;
 int addVertex(double x, double y, double z, std::vector<std::vector<double> > &V) {
   // Also make sure the point is on the unit sphere.
   double length = sqrt(x*x + y*y + z*z);
+  if (length == 0) length = 1;
 
   // Normalize
   std::vector<double> pt = {x/length*m_ConstantSize, y/length*m_ConstantSize, z/length*m_ConstantSize};
 
   if (m_usedPoints.find(pt) == m_usedPoints.end()) {
+    m_usedPoints[pt] = V.size();
     V.push_back(pt);
-    m_usedPoints[pt] = V.size() - 1;
     return V.size() - 1;
   } else {
     return m_usedPoints[pt];
@@ -56,47 +52,48 @@ void tile_init(std::vector<std::vector<double> > &V,
   double t = (1.0 + sqrt(5.0)) / 2.0;
 
   // Start with corners of three orthogonal rectangles.
-  addVertex(-1,  t, 0, V);
-  addVertex( 1,  t, 0, V);
-  addVertex(-1, -t, 0, V);
-  addVertex( 1, -t, 0, V);
+  int idcs[12];
+  idcs[0] = addVertex(-1,  t, 0, V);
+  idcs[1] = addVertex( 1,  t, 0, V);
+  idcs[2] = addVertex(-1, -t, 0, V);
+  idcs[3] = addVertex( 1, -t, 0, V);
 
-  addVertex(0, -1,  t, V);
-  addVertex(0,  1,  t, V);
-  addVertex(0, -1, -t, V);
-  addVertex(0,  1, -t, V);
+  idcs[4] = addVertex(0, -1,  t, V);
+  idcs[5] = addVertex(0,  1,  t, V);
+  idcs[6] = addVertex(0, -1, -t, V);
+  idcs[7] = addVertex(0,  1, -t, V);
 
-  addVertex( t, 0, -1, V);
-  addVertex( t, 0,  1, V);
-  addVertex(-t, 0, -1, V);
-  addVertex(-t, 0,  1, V);
+  idcs[8] = addVertex( t, 0, -1, V);
+  idcs[9] = addVertex( t, 0,  1, V);
+  idcs[10] = addVertex(-t, 0, -1, V);
+  idcs[11] = addVertex(-t, 0,  1, V);
 
   // 5 faces around point 0
-  F.push_back({0, 11, 5});
-  F.push_back({0, 5, 1});
-  F.push_back({0, 1, 7});
-  F.push_back({0, 7, 10});
-  F.push_back({0, 10, 11});
+  F.push_back({idcs[0], idcs[11], idcs[5]});
+  F.push_back({idcs[0], idcs[5], idcs[1]});
+  F.push_back({idcs[0], idcs[1], idcs[7]});
+  F.push_back({idcs[0], idcs[7], idcs[10]});
+  F.push_back({idcs[0], idcs[10], idcs[11]});
   // 5 adjacent faces
-  F.push_back({1, 5, 9});
-  F.push_back({5, 11, 4});
-  F.push_back({11, 10, 2});
-  F.push_back({10, 7, 6});
-  F.push_back({7, 1, 8});
+  F.push_back({idcs[1], idcs[5], idcs[9]});
+  F.push_back({idcs[5], idcs[11], idcs[4]});
+  F.push_back({idcs[11], idcs[10], idcs[2]});
+  F.push_back({idcs[10], idcs[7], idcs[6]});
+  F.push_back({idcs[7], idcs[1], idcs[8]});
 
   // 5 faces around point 3
-  F.push_back({3, 9, 4});
-  F.push_back({3, 4, 2});
-  F.push_back({3, 2, 6});
-  F.push_back({3, 6, 8});
-  F.push_back({3, 8, 9});
+  F.push_back({idcs[3], idcs[9], idcs[4]});
+  F.push_back({idcs[3], idcs[4], idcs[2]});
+  F.push_back({idcs[3], idcs[2], idcs[6]});
+  F.push_back({idcs[3], idcs[6], idcs[8]});
+  F.push_back({idcs[3], idcs[8], idcs[9]});
 
   // 5 adjacent faces
-  F.push_back({4, 9, 5});
-  F.push_back({2, 4, 11});
-  F.push_back({6, 2, 10});
-  F.push_back({8, 6, 7});
-  F.push_back({9, 8, 1});
+  F.push_back({idcs[4], idcs[9], idcs[5]});
+  F.push_back({idcs[2], idcs[4], idcs[11]});
+  F.push_back({idcs[6], idcs[2], idcs[10]});
+  F.push_back({idcs[8], idcs[6], idcs[7]});
+  F.push_back({idcs[9], idcs[8], idcs[1]});
 }
 
 void refine(int k,
@@ -202,6 +199,10 @@ int main(int argc, char* argv[]) {
   }
   int ref_level = atoi(argv[1]);
   m_ConstantSize = atof(argv[2]);
+  if (m_ConstantSize < 0) {
+    fprintf(stderr, "ERROR: size is < 0!! %lf\n", m_ConstantSize);
+    return -1;
+  }
   const char* out_f = argv[3];
 
   std::vector<std::vector<double> > V_v;
