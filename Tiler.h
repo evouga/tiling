@@ -89,18 +89,13 @@ std::vector<Tile*> generateTiles(const std::set<int> &upper, Tile *parent,
                                  bool is_last);
 
 /**
- * Combine all components and extract the surface of a tile.
+ * Returns various levels' components of a tile.
  *
  * Arguments:
  *  @param tile - tile to get mesh on.
- *  @param V - output vertices.
- *  @param F - output faces.
- *  @param O - output markers.
- *  @param full_tile - set to false to get just the current level mesh.
+ *  @param num_tiles - 0 for current layer, 1 for two layers, -1 for all layers.
  */
-void getTileMesh (Tile *tile,
-                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
-                  bool full_tile);
+std::vector<Component*> getTileComponents (Tile *tile, int num_tiles);
 
 } // namespace Tiler
 

@@ -557,33 +557,28 @@ vector<Tile*> generateTiles(const set<int> &upper, Tile *parent,
 }
 
 // Extracts the surface of the current level of the given tile.
-void getTileMesh (Tile *tile,
-                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
-                  bool full_tile) {
-  vector<Eigen::MatrixXd> tileVs;
-  vector<Eigen::MatrixXi> tileFs;
-  vector<Eigen::VectorXi> tileMs;
-
+vector<Component*> getTileComponents (Tile *tile,  int num_tiles) {
   vector<Component*> components;
 
-  if (full_tile)
+  if (num_tiles == -1) {
     components = tile->getAllComponents();
-  else
+  }
+  else if (num_tiles == 0) {
     components = tile->components;
+  }
+  else if (num_tiles == 1) {
+    // Go through current level.
+    for (Component *component : tile->components)
+      components.push_back(component);
 
-  for (Component *component : components) {
-    tileVs.push_back(component->V);
-    tileFs.push_back(component->F);
-    tileMs.push_back(component->M);
+    // Go through previous level.
+    if (tile->bottom_parent != NULL) {
+      for (Component *component : tile->bottom_parent->components)
+        components.push_back(component);
+    }
   }
 
-  // Full mesh.
-  Eigen::MatrixXd tileV;
-  Eigen::MatrixXi tileF;
-  Eigen::VectorXi tileM;
-
-  Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
-  Helpers::extractShell(tileV, tileF, tileM, V, F, O);
+  return components;
 }
 
 } // Namespace Tiler

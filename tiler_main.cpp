@@ -61,6 +61,28 @@ string terribleHashFunction (Tile *tile) {
   return ss.str();
 }
 
+void combineComponentsIntoMesh (const vector<Component*> &components,
+                                Eigen::MatrixXd &V,
+                                Eigen::MatrixXi &F,
+                                Eigen::VectorXi &O) {
+  vector<Eigen::MatrixXd> tileVs;
+  vector<Eigen::MatrixXi> tileFs;
+  vector<Eigen::VectorXi> tileMs;
+
+  for (Component *component : components) {
+    tileVs.push_back(component->V);
+    tileFs.push_back(component->F);
+    tileMs.push_back(component->M);
+  }
+
+  Eigen::MatrixXd tileV;
+  Eigen::MatrixXi tileF;
+  Eigen::VectorXi tileM;
+
+  Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
+  Helpers::extractShell(tileV, tileF, tileM, V, F, O);
+}
+
 double energy (Tile *tile) {
   double score = 0.0;
 
@@ -68,7 +90,9 @@ double energy (Tile *tile) {
   vector<Eigen::MatrixXi> tileFs;
   vector<Eigen::VectorXi> tileMs;
 
-  for (Component *component : tile->components) {
+  vector<Component*> components = getTileComponents(tile, 1);
+
+  for (Component *component : components) {
     Eigen::MatrixXd V = component->V;
     Eigen::MatrixXi F = component->F;
     Eigen::VectorXi O = component->M;
@@ -82,22 +106,20 @@ double energy (Tile *tile) {
     //printf("Viewing temporary mesh...\n");
     //Helpers::viewTriMesh(V_b, F_b, O_b);
 
-    tileVs.push_back(V_b);
-    tileFs.push_back(F_b);
-    tileMs.push_back(O_b);
+    // tileVs.push_back(V_b);
+    // tileFs.push_back(F_b);
+    // tileMs.push_back(O_b);
   }
 
-  // Full mesh.
-  /*
-  Eigen::MatrixXd tileV, V;
-  Eigen::MatrixXi tileF, F;
-  Eigen::VectorXi tileM, O;
-
-  Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
-  Helpers::extractShell(tileV, tileF, tileM, V, F, O);
-  printf("Viewing all meshes...\n");
-  Helpers::viewTriMesh(V, F, O);
-  */
+  // Eigen::MatrixXd tileV, V;
+  // Eigen::MatrixXi tileF, F;
+  // Eigen::VectorXi tileM, O;
+  //
+  // Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
+  // Helpers::extractShell(tileV, tileF, tileM, V, F, O);
+  // printf("Viewing all meshes...\n");
+  // Helpers::viewTriMesh(V, F, O);
+  // */
 
   /*
   // Genus computation.
@@ -119,12 +141,24 @@ double energy (Tile *tile) {
   return score;
 }
 
-void viewTile(Tile *tile, bool all_mesh = true) {
+void viewTile(Tile *tile, int num_tiles=-1, bool save=false) {
+  vector<Component*> components = getTileComponents(tile, num_tiles);
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   Eigen::VectorXi M;
-  getTileMesh(tile, V, F, M, all_mesh);
+
+  combineComponentsIntoMesh(components, V, F, M);
   Helpers::viewTriMesh(V, F, M);
+
+  if (save) {
+    igl::writeOFF("tile.off", V, F);
+
+    // Also write the original vertices
+    FILE* of = fopen("tile_orig.txt", "w");
+    for (int i = 0; i < M.rows(); ++i)
+      fprintf(of, "%d\n", M(i));
+    fclose(of);
+  }
 }
 
 map<set<int>, ConnectedComponent> getHeatFlowValidComponents(SliceStack &ss,
@@ -212,15 +246,24 @@ int main(int argc, char *argv[]) {
         double e2 = energy(best_tiles[tile_id]);
         if (e1 < e2) {
           printf("WON: my energy is %lf vs previous %lf\n", e1, e2);
-          viewTile(tile, true);
-          viewTile(best_tiles[tile_id], true);
 
+          printf("Showing best tile.\nEnergy: %lf\n", e1);
+          viewTile(tile, 1);
+
+          printf("Showing rejected tile.\nEnergy: %lf\n", e2);
+          viewTile(best_tiles[tile_id], 1);
+
+          // Purge the loser.
           delete best_tiles[tile_id];
           best_tiles[tile_id] = tile;
         } else {
           printf("NOT CHANGED: my energy is %lf vs previous %lf\n", e1, e2);
-          viewTile(tile, true);
-          viewTile(best_tiles[tile_id], true);
+
+          printf("Showing best tile.\nEnergy: %lf\n", e2);
+          viewTile(best_tiles[tile_id], 1);
+
+          printf("Showing rejected tile.\nEnergy: %lf\n", e1);
+          viewTile(tile, 1);
         }
       }
 
@@ -240,26 +283,14 @@ int main(int argc, char *argv[]) {
 
     // For debugging.
     if (generated[level].size() > 0) {
-      Eigen::MatrixXd V;
-      Eigen::MatrixXi F;
-      Eigen::VectorXi O;
-
-      cout << "Saving a full tile for debugging." << endl;
-
-      getTileMesh(generated[level].back(), V, F, O, true);
-      igl::writeOFF("tile.off", V, F);
-      // Also write the original vertices
-      FILE* of = fopen("tile_orig.txt", "w");
-      for (int i = 0; i < O.rows(); ++i) {
-        fprintf(of, "%d\n", O(i));
-      }
-      fclose(of);
-
-      //if (level > start &&
-      //    ((level - start) % 10 == 0 || (level - start == num_slices - 1))) {
+      if (level > start &&
+          ((level - start) % 5 == 0 || (level - start == num_slices - 1))) {
         for (Tile *tile : generated[level])
           viewTile(tile);
-      //}
+
+        cout << "Saving a full tile for debugging." << endl;
+        viewTile(generated[level].back(), -1, true);
+      }
     }
   }
 
