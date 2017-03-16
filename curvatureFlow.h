@@ -9,6 +9,11 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                           double timestep,
                           Eigen::MatrixXd &Vc);
 
+double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                    const Eigen::VectorXi &orig,
+                    Eigen::MatrixXd &Vc, Eigen::MatrixXi &Fc,
+                    Eigen::VectorXi &Mc,
+                    double change_val = 10);
 // Given some input mesh V,F, produce an output Vc
 // Also includes a flag to remove any interior "original" markers, so the
 // normals are not messed up.

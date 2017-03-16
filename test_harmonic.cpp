@@ -159,15 +159,12 @@ int main(int argc, char *argv[]) {
   v.launch();
 
   biharmonic_view(V, F, C, Vc, true);
-  //biharmonic(V, F, C, Vc, true);
+  //biharmonic_new(V, F, C, Vc, true);
   //computeCurvatureFlow(V, F, C, 0.1, Vc);
   
-  /*
-  igl::viewer::Viewer v;
-  Eigen::MatrixXd cols;
   igl::jet(C, true, cols);
-  v.data.set_mesh(Vc, F);;
+  v.data.clear();
+  v.data.set_mesh(Vc, F);
   v.data.set_colors(cols);
   v.launch();
-  */
 }

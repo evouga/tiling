@@ -139,22 +139,44 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
   Eigen::MatrixXd V_biharmonic = V;
   Eigen::MatrixXi F_biharmonic = F;
+  Eigen::VectorXi M_biharmonic = M;
   Eigen::SparseMatrix<double> L;
   igl::cotmatrix(V,F,L);
+  bool new_called = false;
 
   v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
     if (key == ' ') {
-      biharmonic(V_biharmonic, F_biharmonic, M, L, V_biharmonic);
+      Eigen::MatrixXd V_next = V_biharmonic;
+      Eigen::MatrixXi F_next = F_biharmonic;
+      Eigen::VectorXi M_next;
+      double en;
+      if (!new_called) {
+        en = biharmonic_new(V_biharmonic, F_biharmonic, M_biharmonic,
+                     V_next, F_next, M_next);
+        new_called = true;
+      } else {
+        en = biharmonic(V_biharmonic, F_biharmonic, M_biharmonic,
+                        V_next);
+        F_next = F_biharmonic;
+        M_next = M_biharmonic;
+      }
+      V_biharmonic = V_next;
+      F_biharmonic = F_next;
+      M_biharmonic = M_next;
+      igl::jet(M_next, true, C);
       //igl::collapse_small_triangles(V_biharmonic, F, 1e-6, F_biharmonic);
-      printf("Finished biharmonic\n");
-      resetView(v, V_biharmonic, F_biharmonic, M, C);
+      printf("Finished biharmonic: %lf\n", en);
+      resetView(v, V_biharmonic, F_biharmonic, M_biharmonic, C);
     }
     else if (key == 'R') {
       printf("Resetting matrices\n");
       igl::cotmatrix(V, F, L);
       V_biharmonic = V;
       F_biharmonic = F;
-      resetView(v, V_biharmonic, F_biharmonic, M, C);
+      M_biharmonic = M;
+      new_called = false;
+      igl::jet(M, true, C);
+      resetView(v, V_biharmonic, F_biharmonic, M_biharmonic, C);
     } else if (key == 'B') {
       printf("Resetting laplacian matrix\n");
       igl::cotmatrix(V,F,L);

@@ -62,10 +62,42 @@ string terribleHashFunction (Tile *tile) {
 }
 
 double energy (Tile *tile) {
-  Eigen::MatrixXd V;
-  Eigen::MatrixXi F;
-  Eigen::VectorXi O;
-  getTileMesh(tile, V, F, O, false);
+  double score = 0.0;
+
+  vector<Eigen::MatrixXd> tileVs;
+  vector<Eigen::MatrixXi> tileFs;
+  vector<Eigen::VectorXi> tileMs;
+
+  for (Component *component : tile->components) {
+    Eigen::MatrixXd V = component->V;
+    Eigen::MatrixXi F = component->F;
+    Eigen::VectorXi O = component->M;
+
+    Eigen::MatrixXd V_s, V_b;
+    Eigen::MatrixXi F_s, F_b;
+    Eigen::VectorXi O_s, O_b;
+
+    Helpers::extractShell(V, F, O, V_s, F_s, O_s);
+    score += biharmonic_new(V_s, F_s, O_s, V_b, F_b, O_b);
+    //printf("Viewing temporary mesh...\n");
+    //Helpers::viewTriMesh(V_b, F_b, O_b);
+
+    tileVs.push_back(V_b);
+    tileFs.push_back(F_b);
+    tileMs.push_back(O_b);
+  }
+
+  // Full mesh.
+  /*
+  Eigen::MatrixXd tileV, V;
+  Eigen::MatrixXi tileF, F;
+  Eigen::VectorXi tileM, O;
+
+  Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
+  Helpers::extractShell(tileV, tileF, tileM, V, F, O);
+  printf("Viewing all meshes...\n");
+  Helpers::viewTriMesh(V, F, O);
+  */
 
   /*
   // Genus computation.
@@ -76,8 +108,10 @@ double energy (Tile *tile) {
   }
   */
 
-  Eigen::MatrixXd unused;
-  double score = biharmonic(V, F, O, unused);
+  //Eigen::MatrixXd unused;
+  //Eigen::MatrixXi unused_f;
+  //Eigen::VectorXi unused_m;
+  //double score = biharmonic_new(V, F, O, unused, unused_f, unused_m);
 
   if (std::isnan(score))
     return INFINITY;
