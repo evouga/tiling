@@ -108,20 +108,23 @@ void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
 
 namespace {
 
-void resetView (igl::viewer::Viewer &view,
+void set_viewer(igl::viewer::Viewer &viewer,
                 const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                const Eigen::VectorXi &M, const Eigen::MatrixXd &C) {
-  view.data.clear();
+                const Eigen::VectorXi &M) {
+  // Add colors.
+  Eigen::MatrixXd C;
+  igl::jet(M, true, C);
 
-  view.data.set_mesh(V, F);
-  view.data.set_colors(C);
+  viewer.data.clear();
+  viewer.data.set_mesh(V, F);
+  viewer.data.set_colors(C);
 
   // Show only one marker for each contour.
   set<int> used;
 
   for (int i = 0; i < M.rows(); i++) {
     if (M(i) != GLOBAL::nonoriginal_marker && used.find(M(i)) == used.end()) {
-      view.data.add_label(V.row(i), to_string(M(i)));
+      viewer.data.add_label(V.row(i), to_string(M(i)));
       used.insert(M(i));
     }
   }
@@ -131,69 +134,61 @@ void resetView (igl::viewer::Viewer &view,
 
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  const Eigen::VectorXi &M) {
-  igl::viewer::Viewer v;
-
-  // Colors.
-  Eigen::MatrixXd C;
-  igl::jet(M, true, C);
+  igl::viewer::Viewer viewer;
 
   Eigen::MatrixXd V_biharmonic = V;
   Eigen::MatrixXi F_biharmonic = F;
   Eigen::VectorXi M_biharmonic = M;
-  Eigen::SparseMatrix<double> L;
-  igl::cotmatrix(V,F,L);
-  bool new_called = false;
+  int times_called = 0;
 
-  v.callback_key_down = [&](igl::viewer::Viewer& v, unsigned char key, int modifier) {
+  viewer.callback_key_down = [&](igl::viewer::Viewer& viewer,
+                                 unsigned char key, int modifier) {
     if (key == ' ') {
       Eigen::MatrixXd V_next = V_biharmonic;
       Eigen::MatrixXi F_next = F_biharmonic;
-      Eigen::VectorXi M_next;
-      double en;
-      if (!new_called) {
-        en = biharmonic_new(V_biharmonic, F_biharmonic, M_biharmonic,
-                     V_next, F_next, M_next);
-        new_called = true;
-      } else {
-        en = biharmonic(V_biharmonic, F_biharmonic, M_biharmonic,
-                        V_next);
-        F_next = F_biharmonic;
-        M_next = M_biharmonic;
+      Eigen::VectorXi M_next = M_biharmonic;
+
+      double energy = 0.0;
+
+      if (times_called == 0) {
+        energy = biharmonic_new(V_biharmonic, F_biharmonic, M_biharmonic,
+                                V_next, F_next, M_next);
       }
+      else {
+        energy = biharmonic(V_biharmonic, F_biharmonic, M_biharmonic,
+                            V_next);
+      }
+
       V_biharmonic = V_next;
       F_biharmonic = F_next;
       M_biharmonic = M_next;
-      igl::jet(M_next, true, C);
-      //igl::collapse_small_triangles(V_biharmonic, F, 1e-6, F_biharmonic);
-      printf("Finished biharmonic: %lf\n", en);
-      resetView(v, V_biharmonic, F_biharmonic, M_biharmonic, C);
+
+      printf("Finished biharmonic: %lf\n", energy);
+      set_viewer(viewer, V_biharmonic, F_biharmonic, M_biharmonic);
+      times_called++;
     }
     else if (key == 'R') {
-      printf("Resetting matrices\n");
-      igl::cotmatrix(V, F, L);
+      printf("Resetting mesh.\n");
       V_biharmonic = V;
       F_biharmonic = F;
       M_biharmonic = M;
-      new_called = false;
-      igl::jet(M, true, C);
-      resetView(v, V_biharmonic, F_biharmonic, M_biharmonic, C);
-    } else if (key == 'B') {
-      printf("Resetting laplacian matrix\n");
-      igl::cotmatrix(V,F,L);
+
+      times_called = 0;
+      set_viewer(viewer, V_biharmonic, F_biharmonic, M_biharmonic);
     }
+
     return true;
   };
 
-  resetView(v, V, F, M, C);
+  set_viewer(viewer, V, F, M);
 
   // Getting random segfaults. Write it to see if it is a mesh problem.
   igl::writeOFF("mesh.off", V, F);
 
   printf("  Press ' ' (space) to compute biharmonic\n");
   printf("  Press 'R' to reset the vertices back to original\n");
-  printf("  Press 'B' to re-compute Laplacian matrix\n");
 
-  v.launch();
+  viewer.launch();
 }
 
 void combineMesh(const vector<Eigen::MatrixXd> &Vs,
@@ -243,7 +238,8 @@ void combineMesh(const vector<Eigen::MatrixXd> &Vs,
   removeDuplicates(V, F, M);
 }
 
-void extractShell(Eigen::MatrixXd &V1, Eigen::MatrixXi &F1, Eigen::VectorXi &M1,
+void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
+                  const Eigen::VectorXi &M1,
                   Eigen::MatrixXd &V2, Eigen::MatrixXi &F2, Eigen::VectorXi &M2) {
   Eigen::MatrixXi F_unique;
   Eigen::VectorXi J;

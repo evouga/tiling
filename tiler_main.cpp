@@ -61,10 +61,10 @@ string terribleHashFunction (Tile *tile) {
   return ss.str();
 }
 
-void combineComponentsIntoMesh (const vector<Component*> &components,
-                                Eigen::MatrixXd &V,
-                                Eigen::MatrixXi &F,
-                                Eigen::VectorXi &O) {
+void combineComponentsIntoMesh(const vector<Component*> &components,
+                               Eigen::MatrixXd &V,
+                               Eigen::MatrixXi &F,
+                               Eigen::VectorXi &O) {
   vector<Eigen::MatrixXd> tileVs;
   vector<Eigen::MatrixXi> tileFs;
   vector<Eigen::VectorXi> tileMs;
@@ -83,7 +83,7 @@ void combineComponentsIntoMesh (const vector<Component*> &components,
   Helpers::extractShell(tileV, tileF, tileM, V, F, O);
 }
 
-double energy (Tile *tile) {
+double energy(Tile *tile) {
   double score = 0.0;
 
   vector<Eigen::MatrixXd> tileVs;
@@ -92,62 +92,46 @@ double energy (Tile *tile) {
 
   vector<Component*> components = getTileComponents(tile, 1);
 
-  for (Component *component : components) {
-    Eigen::MatrixXd V = component->V;
-    Eigen::MatrixXi F = component->F;
-    Eigen::VectorXi O = component->M;
+  for (const Component *component : components) {
+    const Eigen::MatrixXd &V = component->V;
+    const Eigen::MatrixXi &F = component->F;
+    const Eigen::VectorXi &O = component->M;
 
-    Eigen::MatrixXd V_s, V_b;
-    Eigen::MatrixXi F_s, F_b;
-    Eigen::VectorXi O_s, O_b;
+    Eigen::MatrixXd V_shell, V_biharmonic;
+    Eigen::MatrixXi F_shell, F_biharmonic;
+    Eigen::VectorXi O_shell, O_biharmonic;
 
-    Helpers::extractShell(V, F, O, V_s, F_s, O_s);
-    score += biharmonic_new(V_s, F_s, O_s, V_b, F_b, O_b);
-    //printf("Viewing temporary mesh...\n");
-    //Helpers::viewTriMesh(V_b, F_b, O_b);
-
-    // tileVs.push_back(V_b);
-    // tileFs.push_back(F_b);
-    // tileMs.push_back(O_b);
+    // Make sure to pass in a triangle mesh.
+    Helpers::extractShell(V, F, O, V_shell, F_shell, O_shell);
+    score += biharmonic_new(V_shell, F_shell, O_shell,
+                            V_biharmonic, F_biharmonic, O_biharmonic);
   }
 
-  // Eigen::MatrixXd tileV, V;
-  // Eigen::MatrixXi tileF, F;
-  // Eigen::VectorXi tileM, O;
-  //
-  // Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
-  // Helpers::extractShell(tileV, tileF, tileM, V, F, O);
-  // printf("Viewing all meshes...\n");
-  // Helpers::viewTriMesh(V, F, O);
-  // */
+  Eigen::MatrixXd V, V_unused;
+  Eigen::MatrixXi F, F_unused;
+  Eigen::VectorXi M, M_unused;
 
-  /*
-  // Genus computation.
-  double genus = (V.rows() - 0.5 * F.rows() - 2.0) / -2.0;
-  if (genus != 0) {
-    printf("Error: genus is %lf\n", genus);
-    return INFINITY;
-  }
-  */
+  // Why are these not equal? :(.
+  combineComponentsIntoMesh(getTileComponents(tile, 1), V, F, M);
+  cout << "energy: " << score << endl;
+  cout << "together: " << biharmonic_new(V, F, M,
+                                         V_unused, F_unused, M_unused) << endl;
 
-  //Eigen::MatrixXd unused;
-  //Eigen::MatrixXi unused_f;
-  //Eigen::VectorXi unused_m;
-  //double score = biharmonic_new(V, F, O, unused, unused_f, unused_m);
+  // TODO: add genus computation per connected component.
+  // double genus = (V.rows() - 0.5 * F.rows() - 2.0) / -2.0;
 
-  if (std::isnan(score))
+  if (isnan(score))
     return INFINITY;
 
   return score;
 }
 
 void viewTile(Tile *tile, int num_tiles=-1, bool save=false) {
-  vector<Component*> components = getTileComponents(tile, num_tiles);
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   Eigen::VectorXi M;
 
-  combineComponentsIntoMesh(components, V, F, M);
+  combineComponentsIntoMesh(getTileComponents(tile, num_tiles), V, F, M);
   Helpers::viewTriMesh(V, F, M);
 
   if (save) {
@@ -212,7 +196,7 @@ int main(int argc, char *argv[]) {
       // Do exact set cover and get all possible ways to cover.
       for (Tile *tile : Tiler::generateTiles(upper, parent, components, last)) {
 
-        // Go through component add attach the mesh.
+        // Go through component and attach the mesh.
         for (Component *component : tile->components) {
           component->V = contours_to_component[component->contours_used].V;
           component->F = contours_to_component[component->contours_used].F;
@@ -233,7 +217,7 @@ int main(int argc, char *argv[]) {
     for (Tile *tile : current_level_tiles) {
       // Want to save the best from each unique parent connectivity.
       string tile_id = terribleHashFunction(tile);
-      printf("Tile we're working on is id is [%s]\n", tile_id.c_str());
+      printf("Tile:\n=====\n%s=====\n", tile_id.c_str());
       printf("Energy is %lf\n", energy(tile));
 
       if (best_tiles.find(tile_id) == best_tiles.end()) {
@@ -244,29 +228,18 @@ int main(int argc, char *argv[]) {
         // Find the one with lower energy.
         double e1 = energy(tile);
         double e2 = energy(best_tiles[tile_id]);
+
+        printf("First Score: %lf\n", e1);
+        viewTile(tile, 1);
+        printf("Second Score: %lf\n", e2);
+        viewTile(best_tiles[tile_id], 1);
+
         if (e1 < e2) {
-          printf("WON: my energy is %lf vs previous %lf\n", e1, e2);
-
-          printf("Showing best tile.\nEnergy: %lf\n", e1);
-          viewTile(tile, 1);
-
-          printf("Showing rejected tile.\nEnergy: %lf\n", e2);
-          viewTile(best_tiles[tile_id], 1);
-
           // Purge the loser.
           delete best_tiles[tile_id];
           best_tiles[tile_id] = tile;
-        } else {
-          printf("NOT CHANGED: my energy is %lf vs previous %lf\n", e1, e2);
-
-          printf("Showing best tile.\nEnergy: %lf\n", e2);
-          viewTile(best_tiles[tile_id], 1);
-
-          printf("Showing rejected tile.\nEnergy: %lf\n", e1);
-          viewTile(tile, 1);
         }
       }
-
     }
 
     // Populate the current level generated with the best tiles.

@@ -313,8 +313,8 @@ namespace Tiler {
 
 Tile::Tile(const set<int> &upper_contours) :
     bottom_parent(NULL),
-    upper(upper_contours),
-    is_last(false) {
+    is_last(false),
+    upper(upper_contours) {
   for (int x : upper_contours) {
     set<int> component;
     component.insert(x);
@@ -325,8 +325,8 @@ Tile::Tile(const set<int> &upper_contours) :
 Tile::Tile(const set<int> &upper_contours, const vector<set<int> > &components,
            Tile *parent, bool last) :
     bottom_parent(parent),
-    upper(upper_contours),
-    is_last(last) {
+    is_last(last),
+    upper(upper_contours) {
   for (const set<int> &contours : components)
     this->components.push_back(new Component(contours));
 }
@@ -572,7 +572,8 @@ vector<Component*> getTileComponents (Tile *tile,  int num_tiles) {
       components.push_back(component);
 
     // Go through previous level.
-    if (tile->bottom_parent != NULL) {
+    if (tile->bottom_parent != NULL &&
+        tile->bottom_parent->bottom_parent != NULL) {
       for (Component *component : tile->bottom_parent->components)
         components.push_back(component);
     }

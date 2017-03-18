@@ -28,7 +28,8 @@ void combineMesh(const std::vector<Eigen::MatrixXd> &Vs,
                  const std::vector<Eigen::VectorXi> &Ms,
                  Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M);
 
-void extractShell(Eigen::MatrixXd &V1, Eigen::MatrixXi &F1, Eigen::VectorXi &M1,
+void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
+                  const Eigen::VectorXi &M1,
                   Eigen::MatrixXd &V2, Eigen::MatrixXi &F2, Eigen::VectorXi &M2);
 
 } // namespace Helpers

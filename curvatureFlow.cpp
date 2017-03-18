@@ -1,6 +1,6 @@
 #include "curvatureFlow.h"
 
-#include <iostream> // cout
+#include <iostream>
 #include <set>
 #include <map>
 
@@ -25,6 +25,8 @@ static constexpr double gStoppingCriteria = 0.0;
 
 #define FACE_DIM  3
 
+using namespace std;
+
 namespace {
 // Extracts a vector with only the indices of original vertices.
 void convertVectorToIndices(const Eigen::VectorXi &orig,
@@ -46,181 +48,171 @@ void convertVectorToIndices(const Eigen::VectorXi &orig,
 }
 
 // Changes all the faces in the interior (i.e. those that have no non-original
-// neighbors) to non-original faces. Maintains a single layer of fixed
-// vertices.
-void removeInterior(const Eigen::MatrixXi &F, const Eigen::VectorXi &orig,
-                    Eigen::VectorXi &newOrig) {
-  typedef Eigen::Array<bool,Eigen::Dynamic,1> VectorXb;
-  VectorXb nonorig_neighbor(orig.rows());
-  nonorig_neighbor.setConstant(false);
+// neighbors) to non-original faces.
+// Maintains a single layer of fixed vertices.
+void removeInterior(const Eigen::MatrixXi &F, const Eigen::VectorXi &O,
+                    Eigen::VectorXi &O_new) {
+  vector<bool> not_original(O.rows(), false);
 
-  newOrig = orig;
+  // Initialize.
+  O_new = O;
 
-  // Look at all the rows
   for (int i = 0; i < F.rows(); ++i) {
-    bool contains_no = false;
-    // For each face, check and see if there are any nonoriginal markers
+    bool has_nonoriginal_vertex = false;
+
+    // For each face, check and see if there are any nonoriginal markers.
     for (int j = 0; j < F.cols(); ++j) {
-      int vi = F(i, j);
-      if (orig(vi) == GLOBAL::nonoriginal_marker) {
-        contains_no = true;
-        break;
-      }
+      if (O(F(i, j)) == GLOBAL::nonoriginal_marker)
+        has_nonoriginal_vertex = true;
     }
 
-    // if the face does contain a non-original, mark all the vertices correspondingly.
-    if (contains_no) {
-      for (int j = 0; j < F.cols(); ++j) {
-        int vi = F(i, j);
-        nonorig_neighbor(vi) = true;
-      }
-    } else {
-      for (int j = 0; j < F.cols(); ++j) {
-        int vi = F(i, j);
-      }
+    // Change the marker.
+    if (has_nonoriginal_vertex) {
+      for (int j = 0; j < F.cols(); ++j)
+        not_original[F(i, j)] = true;
     }
   }
 
-  for (int i = 0; i < newOrig.rows(); ++i) {
-    if (!nonorig_neighbor(i)) {
-      newOrig(i) = GLOBAL::nonoriginal_marker;
-    }
+  for (int i = 0; i < O_new.rows(); ++i) {
+    if (!not_original[i])
+      O_new(i) = GLOBAL::nonoriginal_marker;
   }
 }
 
-// Will add the faces to border_F
-void getNewPathPoints(const Eigen::MatrixXd &V,
-                      const std::vector<std::vector<int> > &adj_list,
-                      std::map<int, std::map<int, int> > &edge_count,
-                      std::set<int> &visited,
-                      int start, int offset, bool pos,
-                      std::vector<Eigen::VectorXi> &border_F) {
-  // Create an ordering of top_v around the mesh.
-  std::vector<int> path;
+void triangulate_boundary(const Eigen::MatrixXd &V,
+                          const vector<vector<int> > &graph,
+                          map<int, map<int, int> > &edge_count,
+                          set<int> &visited,
+                          int start_node, int offset, bool extend_top,
+                          vector<Eigen::VectorXi> &F_border) {
+  // Make sure to set the start as visited.
+  visited.insert(start_node);
 
-  // Start with one top_v_orig
-  path.push_back(start);
-  visited.insert(start);
+  // A continous path of border vertices' indices.
+  vector<int> path;
 
-  int next = -2;
+  vector<int> to_visit;
+  to_visit.push_back(start_node);
 
-  while(next != -1) {
-    // Add them to the path
-    int current = (next == -2) ? start : next;
-    next = -1;
+  while (to_visit.size() > 0) {
+    int u = to_visit.back();
+            to_visit.pop_back();
+    path.push_back(u);
 
-    for (int n : adj_list[current]) {
-      // Haven't found this point, so go there.
+    for (int v : graph[u]) {
+      if (visited.find(v) != visited.end())
+        continue;
+      else if (edge_count[u][v] != 1)
+        continue;
+
+      visited.insert(v);
       
-      if (visited.find(n) == visited.end() && edge_count[current][n] == 1) {
-        next = n;
-        path.push_back(next);
-        visited.insert(next);
-        break;
-      }
+      // Make sure to break to ensure continuous path.
+      to_visit.push_back(v);
+      break;
     }
   }
 
-  std::vector<Eigen::VectorXi> temp_f;
-  // Add two new faces for each vertex in the path.
+  // The new faces that connect the old and new vertices.
+  vector<Eigen::VectorXi> F_side;
   for (int i = 0; i < path.size(); ++i) {
-    int next = (i + 1) % path.size();
+    int j = (i + 1) % path.size();
 
-    // Create two new faces.
-    Eigen::Vector3i f1;
-    f1 << offset + path[i], offset + path[next], path[i];
-    Eigen::Vector3i f2;
-    f2 << path[next], path[i], offset + path[next];
-    temp_f.push_back(f1);
-    temp_f.push_back(f2);
+    // Create two new faces. Normals are not correct.
+    Eigen::Vector3i f1(offset + path[i], offset + path[j], path[i]);
+    Eigen::Vector3i f2(path[j], path[i], offset + path[j]);
+
+    F_side.push_back(f1);
+    F_side.push_back(f2);
   }
 
-  const auto &p1 = V.row(path[0]);
-  const auto &p2 = V.row(path[1]);
-  const auto &p3 = V.row(path[2]);
-  Eigen::Vector3d u = (p3 - p2).normalized();
-  Eigen::Vector3d v = (p1 - p2).normalized();
-  Eigen::Vector3d n = u.cross(v);
-  //printf("n2:%lf pos:%d\n", n(2), pos);
-  int numGreater = 0, numLess = 0;
+  // Figure out whether the path went clockwise or counterclockwise;
+  int clockwise = 0;
+  int counter_clockwise = 0;
   for (int i = 0; i < path.size(); ++i) {
-    const auto &a = V.row(path[i]);
-    const auto &b = V.row(path[ (i+1) % path.size()]);
-    const auto &c = V.row(path[ (i+2) % path.size()]);
-    Eigen::Vector3d u2 = (c - b);
-    Eigen::Vector3d v2 = (a - b);
-    Eigen::Vector3d n2 = u2.cross(v2);
-    if (n2(2) > GLOBAL::EPS) {
-      numGreater++;
-    } else if (n2(2) < GLOBAL::EPS) {
-      numGreater--;
-    }
+    const Eigen::Vector3d &a = V.row(path[i]);
+    const Eigen::Vector3d &b = V.row(path[(i+1) % path.size()]);
+    const Eigen::Vector3d &c = V.row(path[(i+2) % path.size()]);
+
+    Eigen::Vector3d u = (c - b);
+    Eigen::Vector3d v = (a - b);
+    Eigen::Vector3d w = u.cross(v);
+
+    if (w(2) > GLOBAL::EPS)
+      clockwise++;
+    else if (w(2) < GLOBAL::EPS)
+      clockwise--;
   }
-  if ((numGreater > numLess) == pos) {
-    // Flip face normals.
-    for (auto &f : temp_f) {
-      int temp = f(0);
-      f(0) = f(1);
-      f(1) = temp;
+
+  // Flip face normals if not oriented correctly.
+  if ((clockwise > counter_clockwise) == extend_top) {
+    for (Eigen::VectorXi &face : F_side) {
+      int tmp = face(0);
+      face(0) = face(1);
+      face(1) = tmp;
     }
   }
 
-  // Add them all to border_F
-  for (auto &f : temp_f) {
-    border_F.push_back(f);
-  }
+  // Add the faces for this connected component.
+  for (Eigen::VectorXi &face : F_side)
+    F_border.push_back(face);
 }
 
-void duplicateTopVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                          const Eigen::VectorXi &orig,
-                          Eigen::MatrixXd &newV, Eigen::MatrixXi &newF,
-                          Eigen::VectorXi &newOrig, 
-                          bool use_max,
-                          double ext_amt=0.1) {
-  // Identify extreme vertices
-  std::vector<int> top_v_orig;
-  std::set<int> top_v_nonorig;
-  std::set<int> top_v_all;
-  Eigen::VectorXd limits;
-  if (use_max) {
-    limits = V.colwise().maxCoeff();
-  } else {
-    limits = V.colwise().minCoeff();
-  }
+void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                    const Eigen::VectorXi &O,
+                    Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
+                    Eigen::VectorXi &O_new,
+                    bool extend_top,
+                    double ext_amt=0.1) {
+  // Initalize to something ridiculous.
+  double boundary_z = 1e20;
+  if (extend_top)
+    boundary_z = V.colwise().maxCoeff()(2);
+  else
+    boundary_z = V.colwise().minCoeff()(2);
 
+  // Identify extreme vertices
+  set<int> V_boundary_outer;
+  set<int> V_boundary_inner;
+  set<int> top_v_all;
+
+  // Go through vertices and look for points on boundary.
   for (int i = 0; i < V.rows(); ++i) {
-    if (std::abs(V(i, 2) - limits(2)) < GLOBAL::EPS) {
-      if (orig(i) != GLOBAL::nonoriginal_marker) {
-        top_v_orig.push_back(i);
-      } else {
-        top_v_nonorig.insert(i);
-      }
+    double z = V(i, 2);
+
+    if (fabs(z - boundary_z) < GLOBAL::EPS) {
+      if (O(i) != GLOBAL::nonoriginal_marker)
+        V_boundary_outer.insert(i);
+      else
+        V_boundary_inner.insert(i);
 
       top_v_all.insert(i);
     }
   }
 
   // Degenerate case when there is only one maximal point.
-  if (top_v_orig.size() < 1) {
-    newV = V;
-    newF = F;
-    newOrig = orig;
+  if (V_boundary_outer.size() < 1) {
+    V_new = V;
+    F_new = F;
+    O_new = O;
     return;
   }
 
-  // edge_count[u][v] = edge_count[v][u]
-  std::map<int, std::map<int, int> > edge_count;
+  // edge_count[u][v] = 1 means this is an edge on the boundary.
+  map<int, map<int, int> > edge_count;
+
+  // Use boundary vertices to find all the faces that lie on the boundary.
   for (int i = 0; i < F.rows(); i++) {
-    bool do_it = true;
+    bool all_vertices_on_boundary = true;
     for (int j = 0; j < 3; j++) {
-      int u = F(i, j);
-      if (top_v_all.find(u) == top_v_all.end())
-        do_it = false;
+      if (top_v_all.find(F(i, j)) == top_v_all.end())
+        all_vertices_on_boundary = false;
     }
 
-    if (!do_it)
+    if (!all_vertices_on_boundary)
       continue;
 
+    // Construct undirected graph.
     for (int j = 0; j < 3; j++) {
       int u = F(i, j);
       int v = F(i, (j+1) % 3);
@@ -230,126 +222,124 @@ void duplicateTopVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     }
   }
 
-  int offset = V.rows();
-  // Duplicate points (kinda overkill)
-  Eigen::MatrixXd add_V(V.rows() * 2, V.cols());
+  // Used to offset into raised points.
+  int V_size = V.rows();
+
+  // Duplicate and extend all points (can use speedup).
+  Eigen::MatrixXd V_with_duplicates(V.rows() * 2, V.cols());
+
+  // Vertex i is duplicated and extended at V.rows() + i.
   for (int i = 0; i < V.rows(); ++i) {
-    add_V.row(i) = V.row(i);
-    add_V.row(offset + i) = V.row(i);
-    if (use_max) {
-      add_V(offset + i, 2) += ext_amt;
-    } else {
-      add_V(offset + i, 2) -= ext_amt;
-    }
+    V_with_duplicates.row(i) = V.row(i);
+    V_with_duplicates.row(V_size + i) = V.row(i);
+
+    if (extend_top)
+      V_with_duplicates(V_size + i, 2) += ext_amt;
+    else
+      V_with_duplicates(V_size + i, 2) -= ext_amt;
   }
 
+  // Need to triangulate the sides by traversing the border.
+  vector<Eigen::VectorXi> F_border;
+  set<int> visited;
+  vector<vector<int> > graph;
+  igl::adjacency_list(F, graph);
 
-  // First, create an adjacency list.
-  std::vector<std::vector<int> > adj_list;
-  igl::adjacency_list(F, adj_list);
-  std::set<int> visited; // vertices we've visited.
-  // Extra faces we should add.
-  std::vector<Eigen::VectorXi> border_F;
-  // Use each vertex as a starting point; won't add anything if we've already
-  // visited.
-  for (int idx : top_v_orig) {
-    if (visited.find(idx) == visited.end()) {
-      getNewPathPoints(V, adj_list, edge_count, visited, idx, offset, use_max, border_F);
-    }
+  // DFS along the boundary for all connected components.
+  for (int node : V_boundary_outer) {
+    if (visited.find(node) != visited.end())
+      continue;
+
+    triangulate_boundary(V, graph, edge_count, visited, node, V_size,
+                         extend_top, F_border);
   }
 
-  Eigen::MatrixXi add_F(F.rows() + border_F.size(), F.cols());
+  // Populate F_new. Includes faces of raised points and new triangulated sides.
+  F_new.resize(F.rows() + F_border.size(), F.cols());
 
-  int numFound = 0;
-  // Look at each of the non-shell points to see if we should raise this face.
+  // Look at the original points to see if the vertices should be raised.
   for (int i = 0; i < F.rows(); ++i) {
-    add_F.row(i) = F.row(i);
+    // Copy the original face.
+    F_new.row(i) = F.row(i);
 
-    bool found = false;
+    bool should_raise = false;
+
+    // All inner faces are shifted.
     for (int j = 0; j < F.cols(); ++j) {
-      // New faces from new points.
-      if (top_v_nonorig.find(F(i, j)) != top_v_nonorig.end()) {
-        found = true;
-        break;
-      }
-    }
-    // Also allowed if all 3 faces are in top_v_all (all vertices on the top)
-    if (!found) {
-      if (top_v_all.find(F(i, 0)) != top_v_all.end() &&
-          top_v_all.find(F(i, 1)) != top_v_all.end() &&
-          top_v_all.find(F(i, 2)) != top_v_all.end()) {
-        found = true;
-      }
+      if (V_boundary_inner.find(F(i, j)) != V_boundary_inner.end())
+        should_raise = true;
     }
 
-    // If we've found the vertex, add new faces.
-    if (found) {
-      numFound++;
-      for (int j = 0; j < F.cols(); ++j) {
-        add_F(i, j) += offset; // it has a new vertex.
-      }
+    // Also allowed if all 3 vertices are on the boundary.
+    if (!should_raise &&
+        top_v_all.find(F(i, 0)) != top_v_all.end() &&
+        top_v_all.find(F(i, 1)) != top_v_all.end() &&
+        top_v_all.find(F(i, 2)) != top_v_all.end()) {
+      should_raise = true;
+    }
+
+    // Use the vertices that have been offset.
+    if (should_raise) {
+      for (int j = 0; j < 3; ++j)
+        F_new(i, j) += V_size;
     }
   }
-  /*
-  printf("Found %d faces to change, size of nonorig is %d, orig is %d\n", 
-         numFound, top_v_nonorig.size(), top_v_orig.size());
-         */
 
   // Add the additional faces.
-  for (int i = 0; i < border_F.size(); ++i) {
-    add_F.row(F.rows() + i) = border_F[i];
+  for (int i = 0; i < F_border.size(); ++i)
+    F_new.row(F.rows() + i) = F_border[i];
+
+  // J is new indices into F, I new indices into V
+  Eigen::VectorXi I, J; 
+  igl::remove_unreferenced(V_with_duplicates.rows(), F_new, J, I);
+
+  // Update faces after removing vertices.
+  for (int i = 0; i < F_new.rows(); ++i) {
+    for (int j = 0; j < 3; ++j)
+      F_new(i, j) = J(F_new(i, j));
   }
 
-  // Now, remove unreferenced vertices.
-  Eigen::VectorXi I, J; // J is new indices into F, I new indices into V
-  igl::remove_unreferenced(add_V.rows(), add_F, J, I);
-  //printf("J %lu, I %lu, V: %lu F: %lu\n", J.rows(), I.rows(), add_V.rows(), add_F.rows());
-
-  // Update F
-  newF = add_F;
-  for (int i = 0; i < newF.rows(); ++i) {
-    for (int j = 0; j < 3; ++j) {
-      // Get the new vertex.
-      newF(i, j) = J(newF(i, j));
-    }
-  }
   // Update V, with only things from I.
-  igl::slice(add_V, I, 1, newV);
+  igl::slice(V_with_duplicates, I, 1, V_new);
 
-  newOrig.resize(newV.rows());
-  for (int i = 0; i < newOrig.rows(); ++i) {
-    int idx = I(i);
-    // If it's an added point
-    if (idx >= V.rows()) {
-      // Get the original offset marker.
-      newOrig(i) = orig(idx - offset);
-    } else {
-      newOrig(i) = orig(idx);
-    }
+  // Update the markers.
+  O_new.resize(V_new.rows());
+  for (int i = 0; i < O_new.rows(); ++i) {
+    int updated_index = I(i);
+
+    // Get the original marker.
+    if (updated_index >= V.rows())
+      O_new(i) = O(updated_index - V_size);
+    else
+      O_new(i) = O(updated_index);
   }
 }
 
 } // namespace
 
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                    const Eigen::VectorXi &orig,
-                    Eigen::MatrixXd &Vc, Eigen::MatrixXi &Fc,
-                    Eigen::VectorXi &Mc,
-                    double change_val) {
-  Eigen::VectorXi new_orig = orig;
-  removeInterior(F, orig, new_orig);
-  Eigen::MatrixXd newV, V2;
-  Eigen::MatrixXi F2;
-  Eigen::VectorXi M2;
-  //printf("inside biharmonic_new\n");
-  //Helpers::viewTriMesh(V, F, new_orig);
-  duplicateTopVertices(V, F, new_orig, V2, F2, M2, true); // above
-  //printf("After extending top\n");
-  //Helpers::viewTriMesh(V2, F2, M2);
-  duplicateTopVertices(V2, F2, M2, newV, Fc, Mc, false); // below.
-  //printf("Before biharmonic\n");
-  //Helpers::viewTriMesh(newV, Fc, Mc);
-  return biharmonic(newV, Fc, Mc, Vc, false /* don't remove interior */);
+                      const Eigen::VectorXi &O,
+                      Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
+                      Eigen::VectorXi &O_new) {
+  // The updated markers only keep the boundary vertices.
+  Eigen::VectorXi O_exterior = O;
+  removeInterior(F, O,
+                 O_exterior);
+
+  Eigen::MatrixXd V_prepared;
+  Eigen::MatrixXd V_tmp;
+  Eigen::MatrixXi F_tmp;
+  Eigen::VectorXi O_tmp;
+
+  // Add vertices to top and bottom (respectively).
+  extendVertices(V, F, O_exterior,
+                 V_tmp, F_tmp, O_tmp, true);
+  extendVertices(V_tmp, F_tmp, O_tmp,
+                 V_prepared, F_new, O_new, false);
+
+  // No need to remove interior.
+  return biharmonic(V_prepared, F_new, O_new,
+                    V_new, false);
 }
 
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
