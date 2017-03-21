@@ -9,7 +9,8 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                           double timestep,
                           Eigen::MatrixXd &Vc);
 
-// Adds extra vertices to the top and bottom to prevent collapsing.
+// Adds extra vertices to the top and bottom to prevent collapsing, then calls
+// biharmonic (main function, below) with all the correct inputs.
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &Vc, Eigen::MatrixXi &Fc,
@@ -20,13 +21,27 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 // normals are not messed up.
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                   const Eigen::VectorXi &orig,
-                  Eigen::MatrixXd &Vc, double change_val = 10,
-                  bool remove_interior = true);
-// Same as above, only allows specifying the laplacian matrix.
+                  Eigen::MatrixXd &Vc, bool remove_interior = true);
+/**
+ * Solve biharmonic for a given mesh specified by V,F. orig contains per-vertex
+ * markers, where everything that is fixed is something other than
+ * GLOBAL::nonoriginal_marker. Also includes a parameter that has a non-zero value
+ * for indices that should have a fixed z-component.
+ *
+ * @param V,F vertices and faces of mesh
+ * @param orig vector of length #V that has a GLOBAL::nonoriginal_marker value for
+ *        non-fixed vertices
+ * @param fixed_xy a vector of length #V that has a GLOBAL::nonoriginal_marker value
+ *        for points whose xy-coordinate should be fixed. This can be the same
+ *        as orig.
+ * @param L the Laplacian to use.
+ * @param out Vc the updated vertices
+ * @return the biharmonic energy of the system.
+ */
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                  const Eigen::VectorXi &orig, const Eigen::SparseMatrix<double> &L,
-                  Eigen::MatrixXd &Vc, double change_val = 10,
-                  bool remove_interior = true);
+                  const Eigen::VectorXi &orig, const Eigen::VectorXi &fixed_xy,
+                  const Eigen::SparseMatrix<double> &L,
+                  Eigen::MatrixXd &Vc);
 // Same function as above, for viewing.
 void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                 const Eigen::VectorXi &orig,

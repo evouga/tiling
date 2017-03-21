@@ -46,8 +46,8 @@ int main(int argc, char *argv[]) {
   }
 
   Eigen::MatrixXd V, Vc;
-  Eigen::MatrixXi F;
-  Eigen::VectorXi C;
+  Eigen::MatrixXi F, Fc;
+  Eigen::VectorXi C, Cc;
   bool orig_set = false;
 
   const char* inf = argv[1];
@@ -158,13 +158,13 @@ int main(int argc, char *argv[]) {
   v.data.set_colors(cols);
   v.launch();
 
-  biharmonic_view(V, F, C, Vc, true);
-  //biharmonic_new(V, F, C, Vc, true);
+  //biharmonic_view(V, F, C, Vc, true);
+  biharmonic_new(V, F, C, Vc, Fc, Cc);
   //computeCurvatureFlow(V, F, C, 0.1, Vc);
   
-  igl::jet(C, true, cols);
+  igl::jet(Cc, true, cols);
   v.data.clear();
-  v.data.set_mesh(Vc, F);
+  v.data.set_mesh(Vc, Fc);
   v.data.set_colors(cols);
   v.launch();
 }

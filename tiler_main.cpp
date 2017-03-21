@@ -120,7 +120,7 @@ double energy(Tile *tile) {
   // TODO: add genus computation per connected component.
   // double genus = (V.rows() - 0.5 * F.rows() - 2.0) / -2.0;
 
-  if (isnan(score))
+  if (std::isnan(score))
     return INFINITY;
 
   return score;
