@@ -83,39 +83,35 @@ void combineComponentsIntoMesh(const vector<Component*> &components,
   Helpers::extractShell(tileV, tileF, tileM, V, F, O);
 }
 
-double energy(Tile *tile) {
+double energy(Tile *tile, bool sum_individual=true) {
   double score = 0.0;
 
-  vector<Eigen::MatrixXd> tileVs;
-  vector<Eigen::MatrixXi> tileFs;
-  vector<Eigen::VectorXi> tileMs;
+  if (sum_individual) {
+    // Use two levels' worth of mesh.
+    for (const Component *component : getTileComponents(tile, 1)) {
+      const Eigen::MatrixXd &V = component->V;
+      const Eigen::MatrixXi &F = component->F;
+      const Eigen::VectorXi &O = component->M;
 
-  vector<Component*> components = getTileComponents(tile, 1);
+      Eigen::MatrixXd V_shell, V_biharmonic;
+      Eigen::MatrixXi F_shell, F_biharmonic;
+      Eigen::VectorXi O_shell, O_biharmonic;
 
-  for (const Component *component : components) {
-    const Eigen::MatrixXd &V = component->V;
-    const Eigen::MatrixXi &F = component->F;
-    const Eigen::VectorXi &O = component->M;
-
-    Eigen::MatrixXd V_shell, V_biharmonic;
-    Eigen::MatrixXi F_shell, F_biharmonic;
-    Eigen::VectorXi O_shell, O_biharmonic;
-
-    // Make sure to pass in a triangle mesh.
-    Helpers::extractShell(V, F, O, V_shell, F_shell, O_shell);
-    score += biharmonic_new(V_shell, F_shell, O_shell,
-                            V_biharmonic, F_biharmonic, O_biharmonic);
+      // Make sure to pass in a triangle mesh.
+      Helpers::extractShell(V, F, O, V_shell, F_shell, O_shell);
+      score += biharmonic_new(V_shell, F_shell, O_shell,
+                              V_biharmonic, F_biharmonic, O_biharmonic);
+    }
   }
+  else {
+    Eigen::MatrixXd V, V_unused;
+    Eigen::MatrixXi F, F_unused;
+    Eigen::VectorXi O, O_unused;
 
-  Eigen::MatrixXd V, V_unused;
-  Eigen::MatrixXi F, F_unused;
-  Eigen::VectorXi M, M_unused;
+    combineComponentsIntoMesh(getTileComponents(tile, 1), V, F, O);
 
-  // Why are these not equal? :(.
-  combineComponentsIntoMesh(getTileComponents(tile, 1), V, F, M);
-  cout << "energy: " << score << endl;
-  cout << "together: " << biharmonic_new(V, F, M,
-                                         V_unused, F_unused, M_unused) << endl;
+    score = biharmonic_new(V, F, O, V_unused, F_unused, O_unused);
+  }
 
   // TODO: add genus computation per connected component.
   // double genus = (V.rows() - 0.5 * F.rows() - 2.0) / -2.0;
@@ -217,6 +213,7 @@ int main(int argc, char *argv[]) {
     for (Tile *tile : current_level_tiles) {
       // Want to save the best from each unique parent connectivity.
       string tile_id = terribleHashFunction(tile);
+
       printf("Tile:\n=====\n%s=====\n", tile_id.c_str());
       printf("Energy is %lf\n", energy(tile));
 
@@ -230,12 +227,12 @@ int main(int argc, char *argv[]) {
         double e2 = energy(best_tiles[tile_id]);
 
         printf("First Score: %lf\n", e1);
-        viewTile(tile, 1);
+        // viewTile(tile, 1);
         printf("Second Score: %lf\n", e2);
-        viewTile(best_tiles[tile_id], 1);
+        // viewTile(best_tiles[tile_id], 1);
 
+        // Purge the loser.
         if (e1 < e2) {
-          // Purge the loser.
           delete best_tiles[tile_id];
           best_tiles[tile_id] = tile;
         }
@@ -255,9 +252,9 @@ int main(int argc, char *argv[]) {
     botM = topM;
 
     // For debugging.
-    if (generated[level].size() > 0) {
+    if (generated[level].size() > 0 && false) {
       if (level > start &&
-          ((level - start) % 5 == 0 || (level - start == num_slices - 1))) {
+          ((level - start) % 2 == 0 || (level - start == num_slices - 1))) {
         for (Tile *tile : generated[level])
           viewTile(tile);
 

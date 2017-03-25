@@ -29,46 +29,47 @@ static constexpr double gStoppingCriteria = 0.0;
 using namespace std;
 
 namespace {
+
 // Extracts a vector with only the indices of original vertices.
-void convertVectorToIndices(const Eigen::VectorXi &orig,
-                            Eigen::VectorXi &b) {
+Eigen::VectorXi extract_fixed_vertices(const Eigen::VectorXi &O) {
   // b will contain all the boundary vertices.
-  int num_orig = 0;
-  for (int i = 0; i < orig.rows(); ++i) {
-    if (orig(i) != GLOBAL::nonoriginal_marker) {
-      num_orig++;
-    }
+  int number_fixed = 0;
+  for (int i = 0; i < O.rows(); ++i) {
+    if (O(i) != GLOBAL::nonoriginal_marker)
+      number_fixed++;
   }
-  b.resize(num_orig);
-  int orig_i = 0;
-  for (int i = 0; i < orig.rows(); ++i) {
-    if (orig(i) != GLOBAL::nonoriginal_marker) {
-      b(orig_i++) = i;
-    }
+
+  Eigen::VectorXi fixed_vertices = Eigen::VectorXi(number_fixed);
+
+  int offset = 0;
+  for (int i = 0; i < O.rows(); ++i) {
+    if (O(i) != GLOBAL::nonoriginal_marker)
+      fixed_vertices(offset++) = i;
   }
+
+  return fixed_vertices;
 }
 
 // Changes all the faces in the interior (i.e. those that have no non-original
 // neighbors) to non-original faces.
 // Maintains a single layer of fixed vertices.
-void removeInterior(const Eigen::MatrixXi &F, const Eigen::VectorXi &O,
-                    Eigen::VectorXi &O_new) {
-  vector<bool> not_original(O.rows(), false);
-
+Eigen::VectorXi remove_interior(const Eigen::MatrixXi &F,
+                                const Eigen::VectorXi &O) {
   // Initialize.
-  O_new = O;
+  Eigen::VectorXi O_new = O;
 
+  vector<bool> not_original(O.rows(), false);
   for (int i = 0; i < F.rows(); ++i) {
-    bool has_nonoriginal_vertex = false;
+    bool has_nonoriginal_neighbor = false;
 
     // For each face, check and see if there are any nonoriginal markers.
     for (int j = 0; j < F.cols(); ++j) {
       if (O(F(i, j)) == GLOBAL::nonoriginal_marker)
-        has_nonoriginal_vertex = true;
+        has_nonoriginal_neighbor = true;
     }
 
     // Change the marker.
-    if (has_nonoriginal_vertex) {
+    if (has_nonoriginal_neighbor) {
       for (int j = 0; j < F.cols(); ++j)
         not_original[F(i, j)] = true;
     }
@@ -78,6 +79,8 @@ void removeInterior(const Eigen::MatrixXi &F, const Eigen::VectorXi &O,
     if (!not_original[i])
       O_new(i) = GLOBAL::nonoriginal_marker;
   }
+
+  return O_new;
 }
 
 void triangulate_boundary(const Eigen::MatrixXd &V,
@@ -319,23 +322,38 @@ void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 // separately.
 bool igl_harmonic_single(const Eigen::SparseMatrix<double> &Q,
                          const Eigen::VectorXi &b, const Eigen::VectorXd &V,
-                         int k, int n,
+                         int n,
                          Eigen::VectorXd &W) {
   W.resize(n);
 
-  // Some setup.
-  igl::min_quad_with_fixed_data<double> data;
   // Minimize trace( 0.5*W' * Q * W + constant)
   // subject to:
   //    W(b:) = V, and
-  igl::min_quad_with_fixed_precompute(Q,b,Eigen::SparseMatrix<double>(),true,data);
+  igl::min_quad_with_fixed_data<double> data;
+  igl::min_quad_with_fixed_precompute(Q, b, Eigen::SparseMatrix<double>(),
+                                      true, data);
 
   const Eigen::VectorXd B = Eigen::VectorXd::Zero(n);
-  if(!min_quad_with_fixed_solve(data,B,V,Eigen::VectorXd(),W)) {
-    return false;
-  }
-  return true;
+
+  return min_quad_with_fixed_solve(data, B, V, Eigen::VectorXd(), W);
 }
+
+double biharmonic_energy(const Eigen::MatrixXd &V,
+                         const Eigen::MatrixXi &F) {
+  // Laplacian.
+  Eigen::SparseMatrix<double> L;
+  igl::cotmatrix(V, F, L);
+
+  // Mass matrix.
+  Eigen::SparseMatrix<double> M;
+  igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_DEFAULT, M);
+
+  Eigen::SparseMatrix<double> Mi;
+  igl::invert_diag(M, Mi);
+
+  return (V.transpose() * L.transpose() * Mi * L * V).trace();
+}
+
 } // namespace
 
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
@@ -343,9 +361,7 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
                       Eigen::VectorXi &O_new) {
   // The updated markers only keep the boundary vertices.
-  Eigen::VectorXi O_exterior = O;
-  removeInterior(F, O,
-                 O_exterior);
+  Eigen::VectorXi O_exterior = remove_interior(F, O);
 
   Eigen::MatrixXd V_prepared;
   Eigen::MatrixXd V_tmp;
@@ -353,75 +369,73 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   Eigen::VectorXi O_tmp;
 
   // Remember which vertices are the max/min so we can track the added ones.
-  auto maxs = V.colwise().maxCoeff();
-  auto mins = V.colwise().minCoeff();
+  double z_max_prev = V.colwise().maxCoeff()(2);
+  double z_min_prev = V.colwise().minCoeff()(2);
+
   // Add vertices to top and bottom (respectively).
   extendVertices(V, F, O_exterior,
                  V_tmp, F_tmp, O_tmp, true);
   extendVertices(V_tmp, F_tmp, O_tmp,
                  V_prepared, F_new, O_new, false);
 
-  // Get the vertices that have been added.
-  Eigen::VectorXi xy_nonfixed;
-  xy_nonfixed.resize(V_prepared.rows());
   // Mark the ones that are out of the original scale (new vertices)
+  Eigen::VectorXi xy_nonfixed = O_new;
+
   for (int i = 0; i < V_prepared.rows(); ++i) {
     double z = V_prepared(i, 2);
-    if (z > maxs(2) || z < mins(2)) {
-      xy_nonfixed(i) = GLOBAL::nonoriginal_marker; // make sure it's movable.
-    } else {
-      xy_nonfixed(i) = O_new(i); // Set to nonoriginal_marker if it was before.
-    }
+
+    // If this is a new vertex, allow the x, y to move.
+    if (z > z_max_prev || z < z_min_prev)
+      xy_nonfixed(i) = GLOBAL::nonoriginal_marker;
   }
 
   // Also get the Laplacian
   Eigen::SparseMatrix<double> L;
-  igl::cotmatrix(V_prepared,F_new,L);
+  igl::cotmatrix(V_prepared, F_new, L);
 
   // No need to remove interior.
-  return biharmonic(V_prepared, F_new, O_new, xy_nonfixed, L, V_new);
+  return biharmonic(V_prepared, F_new, O_new, xy_nonfixed, L,
+                    V_new);
 }
 
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                   const Eigen::VectorXi &O,
-                  Eigen::MatrixXd &Vc, bool remove_interior) {
+                  Eigen::MatrixXd &V_new, bool remove_interior_vertices) {
   Eigen::SparseMatrix<double> L;
-  igl::cotmatrix(V,F,L);
+  igl::cotmatrix(V, F, L);
 
-  Eigen::VectorXi new_orig = O;
-  if (remove_interior) {
-    removeInterior(F, O, new_orig);
-  }
+  Eigen::VectorXi O_new = O;
 
-  return biharmonic(V, F, new_orig, new_orig, L, Vc);
+  if (remove_interior_vertices)
+    O_new = remove_interior(F, O);
+
+  return biharmonic(V, F, O_new, O_new, L, V_new);
 }
 
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                  const Eigen::VectorXi &orig, const Eigen::VectorXi &fixed_xy,
+                  const Eigen::VectorXi &O, const Eigen::VectorXi &fixed_xy,
                   const Eigen::SparseMatrix<double> &L,
-                  Eigen::MatrixXd &Vc) {
-  Eigen::VectorXi b_xy, b_z;
-  // Get the correct indices.
-  convertVectorToIndices(orig, b_z);
-  convertVectorToIndices(fixed_xy, b_xy);
-  // The positions of these indices are held constant (just keep the input values)
-  Eigen::MatrixXd V_bc = igl::slice(V, b_xy, 1);
-  Eigen::VectorXd V_xf = V_bc.col(0);
-  Eigen::VectorXd V_yf = V_bc.col(1);
-  // Only want the z-coords
-  Eigen::VectorXd V_zf = igl::slice(V, b_z, 1).col(2);
+                  Eigen::MatrixXd &V_new) {
+  // Get the indices that are fixed.
+  Eigen::VectorXi b_xy = extract_fixed_vertices(fixed_xy);
+  Eigen::VectorXi b_z = extract_fixed_vertices(O);
 
+  // Initialize V_new with input vertices V.
+  V_new = V;
+
+  // Mass matrix, harmonic weights.
   Eigen::SparseMatrix<double> M;
-  igl::massmatrix(V,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
-
-  Vc = V;
-  // Initialize Vc with input vertices V
   Eigen::SparseMatrix<double> Q;
-  int k = 2;
 
   for (int counter = 0; counter < 10; counter++) {
-    // Recompute M, leave L alone.
-    igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
+    // The positions of these indices are held constant (keep the input values).
+    Eigen::MatrixXd V_bc = igl::slice(V_new, b_xy, 1);
+    Eigen::VectorXd V_x_fixed = V_bc.col(0);
+    Eigen::VectorXd V_y_fixed = V_bc.col(1);
+    Eigen::VectorXd V_z_fixed = igl::slice(V_new, b_z, 1).col(2);
+
+    // Recompute M based on the new vertex positions, leave L alone.
+    igl::massmatrix(V_new, F, igl::MASSMATRIX_TYPE_DEFAULT, M);
 
     // How much should we change by?
     /* Previous version, all change the same.
@@ -429,50 +443,46 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     igl::harmonic(L,M, b,V_bc, 2, D);
     Eigen::VectorXd Dx = D.col(0), Dy = D.col(1), Dz = D.col(2);
     */
+
+    // Get biharmonic (k=2) weights.
+    igl::harmonic(L, M, 2, Q);
+
     // Solve for each of these.
-    igl::harmonic(L,M, k, Q);
-    Eigen::VectorXd Dx, Dy, Dz;
-    igl_harmonic_single(Q, b_xy, V_xf, k, V.rows(), Dx);
-    igl_harmonic_single(Q, b_xy, V_yf, k, V.rows(), Dy);
-    igl_harmonic_single(Q, b_z, V_zf, k, V.rows(), Dz);
+    Eigen::VectorXd V_x_new, V_y_new, V_z_new;
+    igl_harmonic_single(Q, b_xy, V_x_fixed, V.rows(), V_x_new);
+    igl_harmonic_single(Q, b_xy, V_y_fixed, V.rows(), V_y_new);
+    igl_harmonic_single(Q,  b_z, V_z_fixed, V.rows(), V_z_new);
 
     // Calculate the difference in vertex positions.
-    double diff = 0;
-    // Vertices updated like:
+    double diff = 0.0;
     for (int i = 0; i < V.rows(); ++i) {
-      Eigen::RowVector3d vr;
-      vr << Dx(i), Dy(i), Dz(i);
-      diff += (Vc.row(i) - vr).norm();
+      Eigen::RowVector3d new_position(V_x_new(i), V_y_new(i), V_z_new(i));
+      diff += (V_new.row(i) - new_position).norm();
     }
 
     // Update the values.
-    Vc.col(0) = Dx;
-    Vc.col(1) = Dy;
-    Vc.col(2) = Dz;
+    V_new.col(0) = V_x_new;
+    V_new.col(1) = V_y_new;
+    V_new.col(2) = V_z_new;
   }
 
   // Calculate the energy.
-  Eigen::SparseMatrix<double> Lt;
-  igl::cotmatrix(Vc,F,Lt);
-  igl::massmatrix(Vc,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
-  Eigen::SparseMatrix<double> Mi;
-  igl::invert_diag(M, Mi);
-  return (Vc.transpose() * Lt * Mi * Lt * Vc).trace();
+  return biharmonic_energy(V_new, F);
 }
 
 // Previous function that allows one to view the biharmonic.
 void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                const Eigen::VectorXi &orig,
-                Eigen::MatrixXd &Vc, bool remove_interior) {
+                     const Eigen::VectorXi &orig,
+                     Eigen::MatrixXd &Vc, bool remove_interior_vertices) {
   Eigen::VectorXi new_orig = orig;
-  if (remove_interior) {
-    removeInterior(F, orig, new_orig);
+
+  if (remove_interior_vertices) {
+    new_orig = remove_interior(F, orig);
   }
 
-  Eigen::VectorXi b;
   // Get the correct indices.
-  //convertVectorToIndices(new_orig, b);
-  convertVectorToIndices(orig, b);
+  Eigen::VectorXi b = extract_fixed_vertices(orig);
+
   // The positions of these indices are held constant (just keep the input values)
   Eigen::MatrixXd V_bc = igl::slice(V, b, 1);
 
@@ -515,16 +525,29 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       // How much should we change by?
       Eigen::MatrixXd D;
       //Eigen::MatrixXd V_bc = igl::slice(Vc, b, 1);
-      igl::harmonic(L,M, b,V_bc, harmonic_idx, D);
+      bool success = igl::harmonic(L,M, b,V_bc, harmonic_idx, D);
+      printf("SUCCESS: %d\n", success);
       //igl::harmonic(Vc,F, b,V_bc, 2, D);
 
+      cout << "lengths" << endl;
+      cout << Vc.rows() << " " << D.rows() << endl;
       // Calculate the difference.
       double diff = 0;
       // Vertices updated like:
       for (int i = 0; i < V.rows(); ++i) {
+        double tmp = (Vc.row(i) - D.row(i)).norm();
+        // if (std::isnan(tmp)) {
+        //   cout << "index: " << i << endl;
+        //   cout << "Vc: " << endl;
+        //   cout << Vc.row(i) << endl;
+        //   cout << "D: " << endl;
+        //   cout << D.row(i) << endl;
+        //   cout << endl;
+        // }
+
         diff += (Vc.row(i) - D.row(i)).norm();
       }
-      printf("Difference this round is %f\n", diff);
+      printf("Difference this round is %lf\n", diff);
       
       // Update the values.
       //Vc = Vc + D;

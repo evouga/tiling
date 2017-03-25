@@ -159,12 +159,17 @@ int main(int argc, char *argv[]) {
   v.launch();
 
   //biharmonic_view(V, F, C, Vc, true);
-  biharmonic_new(V, F, C, Vc, Fc, Cc);
+  double score = biharmonic_new(V, F, C, Vc, Fc, Cc);
+  printf("Score: %lf\n", score);
+
+  Eigen::MatrixXd tmp;
+  biharmonic_view(V, F, C, tmp, false);
+
   //computeCurvatureFlow(V, F, C, 0.1, Vc);
-  
-  igl::jet(Cc, true, cols);
-  v.data.clear();
-  v.data.set_mesh(Vc, Fc);
-  v.data.set_colors(cols);
-  v.launch();
+
+  // igl::jet(Cc, true, cols);
+  // v.data.clear();
+  // v.data.set_mesh(Vc, Fc);
+  // v.data.set_colors(cols);
+  // v.launch();
 }
