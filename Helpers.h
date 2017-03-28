@@ -7,6 +7,11 @@
 
 namespace Helpers {
 
+// For making the mesh manifold.
+void extractManifoldPatch(
+    Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
+    int minFaces = 5); // must have more than one tet (4 faces)
+
 void removeDuplicates(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
 
 Eigen::VectorXi getFaceMarkers(const Eigen::MatrixXi& F, const Eigen::VectorXi& M);

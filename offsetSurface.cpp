@@ -15,6 +15,7 @@
 #include <igl/unique.h>
 
 #include "glob_defs.h"
+#include "Helpers.h"
 
 #define OFFSET_DEBUG 0
 
@@ -266,7 +267,7 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
       Foff(i, j) = all_to_unique(Foff(i, j));
     }
   }
-  // And remove duplicate faces.
+  // And remove duplicate faces (creates a shell)
   Eigen::MatrixXi Fu;
   igl::unique_rows(Foff, Fu,unique_to_all,all_to_unique);
   Foff = Fu;

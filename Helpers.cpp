@@ -11,7 +11,9 @@
 
 #include <igl/collapse_small_triangles.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
+#include <igl/copyleft/cgal/remesh_self_intersections.h>
 #include <igl/cotmatrix.h>
+#include <igl/extract_manifold_patches.h>
 #include <igl/jet.h>
 #include <igl/remove_duplicates.h>
 #include <igl/remove_unreferenced.h>
@@ -23,6 +25,61 @@
 using namespace std;
 
 namespace Helpers {
+
+// Overwrites inputs.
+// Each manifold patch must have at least minFaces faces or it will be
+// removed.
+void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
+                     Eigen::VectorXi &M, int minFaces) {
+  Eigen::VectorXi patchId;
+  int nPatch = igl::extract_manifold_patches(F, patchId);
+  // Find the largest one.
+  int* patchCount = new int[nPatch];
+  // Set to be zero.
+  for (int i = 0; i < nPatch; ++i) {
+    patchCount[i] = 0;
+  }
+  // Find the counts of patches.
+  for (int i = 0; i < patchId.rows(); ++i) {
+    patchCount[patchId(i)]++;
+  }
+  // Get the total number of faces.
+  int totalRows = 0;
+  for (int i = 0; i < nPatch; ++i) {
+    if (patchCount[i] >= minFaces) {
+      totalRows += patchCount[i];
+    }
+  }
+
+  // Remove all faces that are not associated with maxIdx.
+  Eigen::MatrixXi newF(totalRows, F.cols());
+  int newIdx = 0;
+  for (int i = 0; i < F.rows(); ++i) {
+    // Add it to the new mesh if it belongs.
+    int pid = patchId(i);
+    if (patchCount[pid] >= minFaces) {
+      newF.row(newIdx++) = F.row(i);
+    }
+  }
+
+  // Then, remove unreferenced vertices and update markers.
+  Eigen::MatrixXd V2;
+  Eigen::VectorXi M2, J;
+  // J is indices into V
+  // Just write directly into F.
+  igl::remove_unreferenced(V, newF, V2, F, J);
+
+  M2.resize(V2.rows());
+
+  // J_i is -1 if the vertex was removed.
+  for (int i = 0; i < M.rows(); ++i) {
+    if (J(i) != -1)
+      M2(J(i)) = M(i);
+  }
+
+  V = V2;
+  M = M2;
+}
 
 void removeDuplicates(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
                       Eigen::VectorXi &M) {
@@ -139,6 +196,8 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   Eigen::MatrixXd V_biharmonic = V;
   Eigen::MatrixXi F_biharmonic = F;
   Eigen::VectorXi M_biharmonic = M;
+  Eigen::SparseMatrix<double> L;
+
   int times_called = 0;
 
   viewer.callback_key_down = [&](igl::viewer::Viewer& viewer,
@@ -153,9 +212,13 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       if (times_called == 0) {
         energy = biharmonic_new(V_biharmonic, F_biharmonic, M_biharmonic,
                                 V_next, F_next, M_next);
+        // Compute L on the mesh now.
+        igl::cotmatrix(V_next, F_next, L);
       }
       else {
-        energy = biharmonic(V_biharmonic, F_biharmonic, M_biharmonic,
+        energy = biharmonic(V_biharmonic, F_biharmonic, 
+                            M_biharmonic, M_biharmonic, // same fixed verts.
+                            L,
                             V_next);
       }
 
@@ -175,6 +238,10 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
       times_called = 0;
       set_viewer(viewer, V_biharmonic, F_biharmonic, M_biharmonic);
+    } else if (key == 'L') {
+      printf("Recomputing Laplacian\n");
+      // Compute L on the mesh now.
+      igl::cotmatrix(V_biharmonic, F_biharmonic, L);
     }
 
     return true;
@@ -255,6 +322,9 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
     if (J(i) != -1)
       M2(J(i)) = M1(i);
   }
+
+  // Also make sure it's manifold.
+  extractManifoldPatch(V2, F2, M2);
 }
 
 } // namespace Helpers

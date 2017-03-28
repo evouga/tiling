@@ -8,6 +8,7 @@
 
 #include "glob_defs.h"
 #include "curvatureFlow.h"
+#include "Helpers.h"
 
 template<typename T, typename E>
 int getOrig(const char* fn, const char* printf_str, E &O, T dummy) {
@@ -154,6 +155,18 @@ int main(int argc, char *argv[]) {
   igl::viewer::Viewer v;
   Eigen::MatrixXd cols;
   igl::jet(C, true, cols);
+  v.data.clear();
+  v.data.set_mesh(V, F);;
+  v.data.set_colors(cols);
+  v.launch();
+
+  printf("Viewing before:\n");
+  // Let's make sure it's manifold.
+  Helpers::extractManifoldPatch(V, F, C);
+  printf("Viewing after:\n");
+
+  igl::jet(C, true, cols);
+  v.data.clear();
   v.data.set_mesh(V, F);;
   v.data.set_colors(cols);
   v.launch();

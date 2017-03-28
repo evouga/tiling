@@ -226,10 +226,10 @@ int main(int argc, char *argv[]) {
         double e1 = energy(tile);
         double e2 = energy(best_tiles[tile_id]);
 
-        printf("First Score: %lf\n", e1);
-        // viewTile(tile, 1);
+        printf("First Score: %lf (vs %lf)\n", e1, e2);
+        //viewTile(tile, 1);
         printf("Second Score: %lf\n", e2);
-        // viewTile(best_tiles[tile_id], 1);
+        //viewTile(best_tiles[tile_id], 1);
 
         // Purge the loser.
         if (e1 < e2) {
@@ -252,12 +252,16 @@ int main(int argc, char *argv[]) {
     botM = topM;
 
     // For debugging.
-    if (generated[level].size() > 0 && false) {
-      if (level > start &&
-          ((level - start) % 2 == 0 || (level - start == num_slices - 1))) {
-        for (Tile *tile : generated[level])
+    //if (generated[level].size() > 0 && false) {
+    if (generated[level].size() > 0) {
+      //if (level > start &&
+      //    ((level - start) % 2 == 0 || (level - start == num_slices - 1))) {
+      if (level > start) {
+        int count = 0;
+        for (Tile *tile : generated[level]) {
+          printf(" -> Tile %d/%d\n", ++count, generated[level].size());
           viewTile(tile);
-
+        }
         cout << "Saving a full tile for debugging." << endl;
         viewTile(generated[level].back(), -1, true);
       }
