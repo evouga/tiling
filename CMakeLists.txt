@@ -66,14 +66,14 @@ message("libIGL extra sources: ${LIBIGL_EXTRA_SOURCES}")
 message("libIGL extra libraries: ${LIBIGL_EXTRA_LIBRARIES}")
 message("libIGL definitions: ${LIBIGL_DEFINITIONS}")
 
-# Also need libtourtre
-find_package(libtourtre REQUIRED)
-
-if (NOT LIBTOURTRE_FOUND)
-  message(FATAL_ERROR "libtourtre not found -- You can download it using: \n git clone https://github.com/sedillard/libtourtre.git")
-endif(NOT LIBTOURTRE_FOUND)
-message("libtourtre includes: ${LIBTOURTRE_INCLUDE_DIR}")
-message("libtourtre lib: ${LIBTOURTRE_LIB}")
+# # Also need ibtourtre
+# find_package(libtourtre REQUIRED)
+# 
+# if (NOT LIBTOURTRE_FOUND)
+#   message(FATAL_ERROR "libtourtre not found -- You can download it using: \n git clone https://github.com/sedillard/libtourtre.git")
+# endif(NOT LIBTOURTRE_FOUND)
+# message("libtourtre includes: ${LIBTOURTRE_INCLUDE_DIR}")
+# message("libtourtre lib: ${LIBTOURTRE_LIB}")
 
 ### Prepare the build environment
 include_directories(${LIBIGL_INCLUDE_DIRS} ${LIBTOURTRE_INCLUDE_DIR})
@@ -102,7 +102,7 @@ target_link_libraries(test_icoso_tile ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARI
 
 # Dynamic programming for correct topologies.
 add_executable(tiler_main tiler_main.cpp Tiler.cpp ${SRCFILES})
-target_link_libraries(tiler_main ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})
+target_link_libraries(tiler_main ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 # Debugging runner for tiler_main (enter in tile stacks and check if valid).
 # From the build directory -
