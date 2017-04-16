@@ -1,6 +1,8 @@
 #ifndef CURVATURE_FLOW_H
 #define CURVATURE_FLOW_H
 
+#include <vector>
+
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 
@@ -14,7 +16,7 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &Vc, Eigen::MatrixXi &Fc,
-                      Eigen::VectorXi &Mc);
+                      Eigen::VectorXi &Mc, std::vector<int> *new_vertices=NULL);
 
 // Given some input mesh V,F, produce an output Vc
 // Also includes a flag to remove any interior "original" markers, so the
@@ -39,13 +41,18 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
  * @return the biharmonic energy of the system.
  */
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                  const Eigen::VectorXi &orig, const Eigen::VectorXi &fixed_xy,
+                  const Eigen::VectorXi &orig, const Eigen::VectorXi &xy_nonfixed,
                   const Eigen::SparseMatrix<double> &L,
                   Eigen::MatrixXd &Vc);
+
 // Same function as above, for viewing.
 void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                 const Eigen::VectorXi &orig,
                 Eigen::MatrixXd &Vc,
                 bool remove_interior = true);
+
+Eigen::VectorXd biharmonic_energy_per_vertex(const Eigen::MatrixXd &V,
+                                             const Eigen::MatrixXi &F,
+                                             const std::vector<int> &to_ignore);
 
 #endif // CURVATURE_FLOW_H

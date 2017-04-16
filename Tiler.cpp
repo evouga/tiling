@@ -560,13 +560,13 @@ vector<Tile*> generateTiles(const set<int> &upper, Tile *parent,
 vector<Component*> getTileComponents (Tile *tile,  int num_tiles) {
   vector<Component*> components;
 
-  if (num_tiles == -1) {
+  if (num_tiles == 0) {
     components = tile->getAllComponents();
   }
-  else if (num_tiles == 0) {
+  else if (num_tiles == 1) {
     components = tile->components;
   }
-  else if (num_tiles == 1) {
+  else if (num_tiles == 2) {
     // Go through current level.
     for (Component *component : tile->components)
       components.push_back(component);

@@ -88,7 +88,7 @@ double energy(Tile *tile, bool sum_individual=true) {
 
   if (sum_individual) {
     // Use two levels' worth of mesh.
-    for (const Component *component : getTileComponents(tile, 1)) {
+    for (const Component *component : getTileComponents(tile, 2)) {
       const Eigen::MatrixXd &V = component->V;
       const Eigen::MatrixXi &F = component->F;
       const Eigen::VectorXi &O = component->M;
@@ -96,21 +96,24 @@ double energy(Tile *tile, bool sum_individual=true) {
       Eigen::MatrixXd V_shell, V_biharmonic;
       Eigen::MatrixXi F_shell, F_biharmonic;
       Eigen::VectorXi O_shell, O_biharmonic;
+      vector<int> new_vertices;
 
       // Make sure to pass in a triangle mesh.
       Helpers::extractShell(V, F, O, V_shell, F_shell, O_shell);
       score += biharmonic_new(V_shell, F_shell, O_shell,
-                              V_biharmonic, F_biharmonic, O_biharmonic);
+                              V_biharmonic, F_biharmonic, O_biharmonic,
+                              &new_vertices);
     }
   }
   else {
     Eigen::MatrixXd V, V_unused;
     Eigen::MatrixXi F, F_unused;
     Eigen::VectorXi O, O_unused;
+    vector<int> new_vertices;
 
-    combineComponentsIntoMesh(getTileComponents(tile, 1), V, F, O);
+    combineComponentsIntoMesh(getTileComponents(tile, 2), V, F, O);
 
-    score = biharmonic_new(V, F, O, V_unused, F_unused, O_unused);
+    score = biharmonic_new(V, F, O, V_unused, F_unused, O_unused, &new_vertices);
   }
 
   // TODO: add genus computation per connected component.
@@ -122,7 +125,7 @@ double energy(Tile *tile, bool sum_individual=true) {
   return score;
 }
 
-void viewTile(Tile *tile, int num_tiles=-1, bool save=false) {
+void viewTile(Tile *tile, int num_tiles=0, bool save=false) {
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
   Eigen::VectorXi M;
@@ -209,6 +212,12 @@ int main(int argc, char *argv[]) {
 
     cout << "Scoring each tile." << endl;
 
+    // View all the tiles first.
+    for (Tile *tile : current_level_tiles) {
+      cout << "Energy: " << energy(tile) << endl;
+      viewTile(tile, 0);
+    }
+
     // Pick the best of each connectivity.
     for (Tile *tile : current_level_tiles) {
       // Want to save the best from each unique parent connectivity.
@@ -252,23 +261,17 @@ int main(int argc, char *argv[]) {
     botM = topM;
 
     // For debugging.
-    //if (generated[level].size() > 0 && false) {
-    if (generated[level].size() > 0) {
-      //if (level > start &&
-      //    ((level - start) % 2 == 0 || (level - start == num_slices - 1))) {
-      if (level > start) {
-        int count = 0;
-        for (Tile *tile : generated[level]) {
-          printf(" -> Tile %d/%d\n", ++count, generated[level].size());
-          viewTile(tile);
-        }
-        cout << "Saving a full tile for debugging." << endl;
-        viewTile(generated[level].back(), -1, true);
+    if (level > start) {
+      int current_tile = 0;
+
+      for (Tile *tile : generated[level]) {
+        printf(" -> Tile %d/%lu\n", ++current_tile, generated[level].size());
+        viewTile(tile);
       }
     }
   }
 
-  cout << generated[start + num_slices - 1].size() << " valid tilings." << endl;
+  cout << "Valid tilings: " << generated[start + num_slices - 1].size() << endl;
 
   // Show full tiles.
   for (Tile *tile : generated[start + num_slices - 1])

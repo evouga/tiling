@@ -180,23 +180,45 @@ void set_viewer(igl::viewer::Viewer &viewer,
   set<int> used;
 
   for (int i = 0; i < M.rows(); i++) {
-    if (M(i) != GLOBAL::nonoriginal_marker && used.find(M(i)) == used.end()) {
-      viewer.data.add_label(V.row(i), to_string(M(i)));
-      used.insert(M(i));
-    }
+    if (M(i) == GLOBAL::nonoriginal_marker)
+      continue;
+    else if (used.find(M(i)) != used.end())
+      continue;
+
+    viewer.data.add_label(V.row(i), to_string(M(i)));
+    used.insert(M(i));
   }
+}
+
+void set_viewer_with_color(igl::viewer::Viewer &viewer,
+                           const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                           const Eigen::VectorXd &C_unnormalized) {
+  // Take the log of the squared values.
+  Eigen::VectorXd C_normalized(C_unnormalized.rows());
+  for (int i = 0; i < C_unnormalized.rows(); i++)
+    C_normalized(i) = log(C_unnormalized(i) * C_unnormalized(i) + 1e-5);
+
+  // Turn scalars into colors.
+  Eigen::MatrixXd C;
+  igl::jet(C_normalized, true, C);
+
+  viewer.data.clear();
+  viewer.data.set_mesh(V, F);
+  viewer.data.set_colors(C);
 }
 
 }
 
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                 const Eigen::VectorXi &M) {
+                 const Eigen::VectorXi &O) {
+
   igl::viewer::Viewer viewer;
 
   Eigen::MatrixXd V_biharmonic = V;
   Eigen::MatrixXi F_biharmonic = F;
-  Eigen::VectorXi M_biharmonic = M;
+  Eigen::VectorXi O_biharmonic = O;
   Eigen::SparseMatrix<double> L;
+  vector<int> new_vertices;
 
   int times_called = 0;
 
@@ -205,49 +227,58 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     if (key == ' ') {
       Eigen::MatrixXd V_next = V_biharmonic;
       Eigen::MatrixXi F_next = F_biharmonic;
-      Eigen::VectorXi M_next = M_biharmonic;
+      Eigen::VectorXi M_next = O_biharmonic;
 
       double energy = 0.0;
 
       if (times_called == 0) {
-        energy = biharmonic_new(V_biharmonic, F_biharmonic, M_biharmonic,
-                                V_next, F_next, M_next);
+        energy = biharmonic_new(V_biharmonic, F_biharmonic, O_biharmonic,
+                                V_next, F_next, M_next, &new_vertices);
         // Compute L on the mesh now.
         igl::cotmatrix(V_next, F_next, L);
       }
       else {
         energy = biharmonic(V_biharmonic, F_biharmonic, 
-                            M_biharmonic, M_biharmonic, // same fixed verts.
+                            O_biharmonic, O_biharmonic, // same fixed verts.
                             L,
                             V_next);
       }
 
       V_biharmonic = V_next;
       F_biharmonic = F_next;
-      M_biharmonic = M_next;
+      O_biharmonic = M_next;
 
       printf("Finished biharmonic: %lf\n", energy);
-      set_viewer(viewer, V_biharmonic, F_biharmonic, M_biharmonic);
+      set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
       times_called++;
     }
     else if (key == 'R') {
       printf("Resetting mesh.\n");
       V_biharmonic = V;
       F_biharmonic = F;
-      M_biharmonic = M;
+      O_biharmonic = O;
 
       times_called = 0;
-      set_viewer(viewer, V_biharmonic, F_biharmonic, M_biharmonic);
+      set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
     } else if (key == 'L') {
       printf("Recomputing Laplacian\n");
       // Compute L on the mesh now.
       igl::cotmatrix(V_biharmonic, F_biharmonic, L);
+    } else if (key == 'C') {
+      printf("Visualizing energy at each vertex.\n");
+
+      // All the new points should be ignored in energy calculation.
+      Eigen::VectorXd energy_density = biharmonic_energy_per_vertex(V_biharmonic,
+                                                                    F_biharmonic,
+                                                                    new_vertices);
+
+      set_viewer_with_color(viewer, V_biharmonic, F_biharmonic, energy_density);
     }
 
     return true;
   };
 
-  set_viewer(viewer, V, F, M);
+  set_viewer(viewer, V, F, O);
 
   // Getting random segfaults. Write it to see if it is a mesh problem.
   igl::writeOFF("mesh.off", V, F);

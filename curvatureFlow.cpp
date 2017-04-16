@@ -3,6 +3,7 @@
 #include <iostream>
 #include <set>
 #include <map>
+#include <limits>
 
 #include <igl/adjacency_list.h>
 #include <igl/barycenter.h>
@@ -30,15 +31,15 @@ using namespace std;
 
 namespace {
 
-// Extracts a vector with only the indices of original vertices.
+// nonoriginal_markers are allowed to move.
 Eigen::VectorXi extract_fixed_vertices(const Eigen::VectorXi &O) {
-  // b will contain all the boundary vertices.
   int number_fixed = 0;
   for (int i = 0; i < O.rows(); ++i) {
     if (O(i) != GLOBAL::nonoriginal_marker)
       number_fixed++;
   }
 
+  // Will contain all the boundary vertices.
   Eigen::VectorXi fixed_vertices = Eigen::VectorXi(number_fixed);
 
   int offset = 0;
@@ -183,6 +184,7 @@ void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   for (int i = 0; i < V.rows(); ++i) {
     double z = V(i, 2);
 
+    // On the boundary.
     if (fabs(z - boundary_z) < GLOBAL::EPS) {
       if (O(i) != GLOBAL::nonoriginal_marker)
         V_boundary_outer.insert(i);
@@ -311,8 +313,13 @@ void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     int updated_index = I(i);
 
     // Get the original marker.
-    if (updated_index >= V.rows())
+    if (updated_index >= V.rows()) {
       O_new(i) = O(updated_index - V_size);
+      // if (O(updated_index - V_size) != GLOBAL::nonoriginal_marker)
+      //   O_new(i) = GLOBAL::extended_vertices_contour;
+      // else
+      //   O_new(i) = GLOBAL::nonoriginal_marker;
+    }
     else
       O_new(i) = O(updated_index);
   }
@@ -339,7 +346,8 @@ bool igl_harmonic_single(const Eigen::SparseMatrix<double> &Q,
 }
 
 double biharmonic_energy(const Eigen::MatrixXd &V,
-                         const Eigen::MatrixXi &F) {
+                         const Eigen::MatrixXi &F,
+                         const vector<int> *to_ignore=NULL) {
   // Laplacian.
   Eigen::SparseMatrix<double> L;
   igl::cotmatrix(V, F, L);
@@ -347,6 +355,12 @@ double biharmonic_energy(const Eigen::MatrixXd &V,
   // Mass matrix.
   Eigen::SparseMatrix<double> M;
   igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_DEFAULT, M);
+
+  // Ignore the energy contribution from the new points.
+  if (to_ignore != NULL) {
+    for (int i : *to_ignore)
+      M.coeffRef(i, i) = numeric_limits<double>::infinity();
+  }
 
   Eigen::SparseMatrix<double> Mi;
   igl::invert_diag(M, Mi);
@@ -359,7 +373,7 @@ double biharmonic_energy(const Eigen::MatrixXd &V,
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
-                      Eigen::VectorXi &O_new) {
+                      Eigen::VectorXi &O_new, vector<int> *new_vertices) {
   // The updated markers only keep the boundary vertices.
   Eigen::VectorXi O_exterior = remove_interior(F, O);
 
@@ -381,21 +395,31 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // Mark the ones that are out of the original scale (new vertices)
   Eigen::VectorXi xy_nonfixed = O_new;
 
+  // Let the world know the indices of the vertices added.
+  if (new_vertices != NULL)
+    new_vertices->clear();
+
   for (int i = 0; i < V_prepared.rows(); ++i) {
     double z = V_prepared(i, 2);
 
     // If this is a new vertex, allow the x, y to move.
-    if (z > z_max_prev || z < z_min_prev)
+    if (z > z_max_prev || z < z_min_prev) {
       xy_nonfixed(i) = GLOBAL::nonoriginal_marker;
+
+      if (new_vertices != NULL)
+        new_vertices->push_back(i);
+    }
   }
 
   // Also get the Laplacian
   Eigen::SparseMatrix<double> L;
   igl::cotmatrix(V_prepared, F_new, L);
 
-  // No need to remove interior.
-  return biharmonic(V_prepared, F_new, O_new, xy_nonfixed, L,
-                    V_new);
+  // This energy include the caps.
+  biharmonic(V_prepared, F_new, O_new, xy_nonfixed, L, V_new);
+
+  // Decapitate the caps.
+  return biharmonic_energy(V_new, F_new, new_vertices);
 }
 
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
@@ -413,11 +437,11 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 }
 
 double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                  const Eigen::VectorXi &O, const Eigen::VectorXi &fixed_xy,
+                  const Eigen::VectorXi &O, const Eigen::VectorXi &xy_nonfixed,
                   const Eigen::SparseMatrix<double> &L,
                   Eigen::MatrixXd &V_new) {
   // Get the indices that are fixed.
-  Eigen::VectorXi b_xy = extract_fixed_vertices(fixed_xy);
+  Eigen::VectorXi b_xy = extract_fixed_vertices(xy_nonfixed);
   Eigen::VectorXi b_z = extract_fixed_vertices(O);
 
   // Initialize V_new with input vertices V.
@@ -466,7 +490,7 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     V_new.col(2) = V_z_new;
   }
 
-  // Calculate the energy.
+  // Calculate the energy including the bubbles.
   return biharmonic_energy(V_new, F);
 }
 
@@ -660,4 +684,26 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     v.launch();
 
   } while (difference > gStoppingCriteria);
+}
+
+Eigen::VectorXd biharmonic_energy_per_vertex(const Eigen::MatrixXd &V,
+                                             const Eigen::MatrixXi &F,
+                                             const vector<int> &to_ignore) {
+  // Laplacian.
+  Eigen::SparseMatrix<double> L;
+  igl::cotmatrix(V, F, L);
+
+  // Mass matrix.
+  Eigen::SparseMatrix<double> M;
+  igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_DEFAULT, M);
+
+  // Ignore the energy contribution from certain vertices.
+  for (int i : to_ignore)
+    M.coeffRef(i, i) = numeric_limits<double>::infinity();
+
+  Eigen::SparseMatrix<double> Mi;
+  igl::invert_diag(M, Mi);
+
+  // The Vector3d sums the entire row.
+  return Mi * L * V * Eigen::Vector3d(1.0, 1.0, 1.0);;
 }
