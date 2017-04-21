@@ -238,7 +238,7 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
         igl::cotmatrix(V_next, F_next, L);
       }
       else {
-        energy = biharmonic(V_biharmonic, F_biharmonic, 
+        energy = biharmonic(V_biharmonic, F_biharmonic,
                             O_biharmonic, O_biharmonic, // same fixed verts.
                             L,
                             V_next);

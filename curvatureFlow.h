@@ -55,4 +55,8 @@ Eigen::VectorXd biharmonic_energy_per_vertex(const Eigen::MatrixXd &V,
                                              const Eigen::MatrixXi &F,
                                              const std::vector<int> &to_ignore);
 
+double geodesic_curvature(const Eigen::MatrixXd &V,
+                          const Eigen::MatrixXi &F,
+                          const std::vector<int> *border_vertices);
+
 #endif // CURVATURE_FLOW_H

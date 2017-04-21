@@ -313,13 +313,8 @@ void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     int updated_index = I(i);
 
     // Get the original marker.
-    if (updated_index >= V.rows()) {
+    if (updated_index >= V.rows())
       O_new(i) = O(updated_index - V_size);
-      // if (O(updated_index - V_size) != GLOBAL::nonoriginal_marker)
-      //   O_new(i) = GLOBAL::extended_vertices_contour;
-      // else
-      //   O_new(i) = GLOBAL::nonoriginal_marker;
-    }
     else
       O_new(i) = O(updated_index);
   }
@@ -348,7 +343,9 @@ bool igl_harmonic_single(const Eigen::SparseMatrix<double> &Q,
 double biharmonic_energy(const Eigen::MatrixXd &V,
                          const Eigen::MatrixXi &F,
                          const vector<int> *to_ignore=NULL) {
-  // Laplacian.
+  double geodesic = geodesic_curvature(V, F, to_ignore);
+
+  // Compute mean curvature.
   Eigen::SparseMatrix<double> L;
   igl::cotmatrix(V, F, L);
 
@@ -405,7 +402,10 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     // If this is a new vertex, allow the x, y to move.
     if (z > z_max_prev || z < z_min_prev) {
       xy_nonfixed(i) = GLOBAL::nonoriginal_marker;
+    }
 
+    // Don't compute mean curvature at edges.
+    if (z >= z_max_prev || z <= z_min_prev) {
       if (new_vertices != NULL)
         new_vertices->push_back(i);
     }
@@ -706,4 +706,103 @@ Eigen::VectorXd biharmonic_energy_per_vertex(const Eigen::MatrixXd &V,
 
   // The Vector3d sums the entire row.
   return Mi * L * V * Eigen::Vector3d(1.0, 1.0, 1.0);;
+}
+
+double geodesic_curvature(const Eigen::MatrixXd &V,
+                          const Eigen::MatrixXi &F,
+                          const vector<int> *border_vertices) {
+  // The geodesic curvature of a closed surface is constant.
+  if (border_vertices == NULL)
+    return 0.0;
+
+  // Vertex index on border to adjacent face indices.
+  set<int> border(border_vertices->begin(), border_vertices->end());
+  map<int, vector<int> > vertex_to_face;
+
+  for (int face_index = 0; face_index < F.rows(); face_index++) {
+    int number_in_border = 0;
+
+    for (int i = 0; i < 3; i++) {
+      if (border.find(F(face_index, i)) != border.end())
+        number_in_border++;
+    }
+
+    // The face lies on the boundary.
+    if (number_in_border == 1 || number_in_border == 2) {
+      for (int i = 0; i < 3; i++) {
+        if (border.find(F(face_index, i)) != border.end())
+          vertex_to_face[F(face_index, i)].push_back(face_index);
+      }
+    }
+  }
+
+  // Border vertices may include a random point surrounded by non border points.
+  set<int> faulty;
+  for (const auto &vertex_faces : vertex_to_face) {
+    int vertex_index = vertex_faces.first;
+    int faces_with_one_on_border = 0;
+
+    for (int face_index : vertex_faces.second) {
+      int on_border = 0;
+
+      for (int i = 0; i < 3; i++) {
+        if (border.find(F(face_index, i)) != border.end())
+          on_border++;
+      }
+
+      if (on_border == 1)
+        faces_with_one_on_border++;
+    }
+
+    if (faces_with_one_on_border == vertex_faces.second.size())
+      faulty.insert(vertex_index);
+  }
+
+  // Remove them.
+  for (int vertex_index : faulty)
+    vertex_to_face.erase(vertex_index);
+
+  // VIEW THE BOUNDARY FACES.
+  // Eigen::VectorXi debug_colors(V.rows());
+  // for (int i = 0; i < V.rows(); i++)
+  //   debug_colors(i) = GLOBAL::nonoriginal_marker;
+  // for (const auto &vertex_faces : vertex_to_face) {
+  //   for (int face_index : vertex_faces.second) {
+  //     for (int i = 0; i < 3; i++)
+  //       debug_colors(F(face_index, i)) = 100;
+  //   }
+  // }
+  // cout << "boundary faces" << endl;
+  // Helpers::viewTriMesh(V, F, debug_colors);
+
+  double curvature = 0.0;
+
+  // Actually calculate geodesic curvature.
+  for (const auto &vertex_faces : vertex_to_face) {
+    int vertex_index = vertex_faces.first;
+
+    double sum_interior_angles = 0.0;
+
+    // K = pi - sum(theta_interior).
+    for (int face_index : vertex_faces.second) {
+      int a = vertex_index;
+      int b = F(face_index, 0);
+      int c = F(face_index, 1);
+
+      if (b == vertex_index)
+        b = F(face_index, 2);
+      if (c == vertex_index)
+        c = F(face_index, 2);
+
+      // The edges coming from the vertex.
+      Eigen::Vector3d u = (V.row(b) - V.row(a)).normalized();
+      Eigen::Vector3d v = (V.row(c) - V.row(a)).normalized();
+
+      sum_interior_angles += acos(u.dot(v));
+    }
+
+    curvature += M_PI - sum_interior_angles;
+  }
+
+  return curvature;
 }
