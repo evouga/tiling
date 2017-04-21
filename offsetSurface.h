@@ -34,6 +34,13 @@ void generateOffsetSurface_naive(
     const Eigen::VectorXd &C, double off,
     Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff);
 
+// Offset surface using marching tets.
+void marchingOffsetSurface(
+    const Eigen::MatrixXd &V,
+    const Eigen::MatrixXi &TT,
+    const Eigen::VectorXi &TO,
+    const Eigen::VectorXd &C, double off,
+    Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff);
 } // namespace OffsetSurface
 
 #endif // OFFSET_SURFACE_H

@@ -70,6 +70,8 @@ bool is_edge_manifold(const Eigen::MatrixXi &F,
 // removed.
 void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
                      Eigen::VectorXi &M, int minFaces) {
+  //std::map<std::pair<int,int>, int> edge_pairs; 
+
   bool is_manifold = igl::is_edge_manifold(F);
   Eigen::VectorXi B;
   bool is_v_manifold = igl::is_vertex_manifold(F, B);
@@ -111,7 +113,9 @@ void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
   }
   // Get the total number of faces.
   int totalRows = 0;
+  printf("Number of patches is %d\n", nPatch);
   for (int i = 0; i < nPatch; ++i) {
+    printf(" - %d -> %d\n", i, patchCount[i]);
     if (patchCount[i] >= minFaces) {
       totalRows += patchCount[i];
     }
@@ -235,7 +239,7 @@ namespace {
 
 void set_viewer(igl::viewer::Viewer &viewer,
                 const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                const Eigen::VectorXi &M) {
+                const Eigen::VectorXi &M, bool add_labels = true) {
   // Add colors.
   Eigen::MatrixXd C;
   igl::jet(M, true, C);
@@ -248,13 +252,15 @@ void set_viewer(igl::viewer::Viewer &viewer,
   set<int> used;
 
   for (int i = 0; i < M.rows(); i++) {
+    if (M(i) == 100) printf("--------- Found it ---------------\n");
     if (M(i) == GLOBAL::nonoriginal_marker)
       continue;
+    //else if (used.find(M(i)) != used.end() && M(i) != 100)
     else if (used.find(M(i)) != used.end())
       continue;
 
-    viewer.data.add_label(V.row(i), to_string(M(i)));
-    used.insert(M(i));
+    if (add_labels) viewer.data.add_label(V.row(i), to_string(M(i)));
+    //used.insert(M(i));
   }
 }
 
@@ -306,7 +312,7 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
         igl::cotmatrix(V_next, F_next, L);
       }
       else {
-        energy = biharmonic(V_biharmonic, F_biharmonic,
+        energy = biharmonic(V_biharmonic, F_biharmonic, 
                             O_biharmonic, O_biharmonic, // same fixed verts.
                             L,
                             V_next);
@@ -327,7 +333,7 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       O_biharmonic = O;
 
       times_called = 0;
-      set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
+      set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic, false);
     } else if (key == 'L') {
       printf("Recomputing Laplacian\n");
       // Compute L on the mesh now.
@@ -356,6 +362,70 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
   viewer.launch();
 }
+
+void offsetViewer(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT,
+                  const Eigen::VectorXd &VH) {
+  igl::viewer::Viewer viewer;
+  double delta = 0.05;
+  double offset = 0.5;
+
+  viewer.callback_key_down = [&](igl::viewer::Viewer& viewer,
+                                 unsigned char key, int modifier) {
+      bool changed = false;
+      if (key == 'P') {
+        offset += delta;
+        if (offset > 1) offset = 1;
+        changed = true;
+      } else if (key == 'M') {
+        offset -= delta;
+        if (offset < 0) offset = 0;
+        changed = true;
+      }
+
+      if (changed) {
+        printf("changing offset to %lf...\n", offset);
+        Eigen::MatrixXd V;
+        Eigen::MatrixXi F;
+        Eigen::VectorXi I;
+        marching_tets(TV, TT, VH, offset, V, F, I);
+        Eigen::VectorXd C(V.rows());
+        for (int i = 0; i < C.rows(); ++i) {
+          if (I(i) == -1) {
+            C(i) = offset;
+          } else {
+            C(i) = VH(I(i));
+          }
+        }
+        Eigen::MatrixXd Cols;
+        igl::jet(C, true, Cols);
+        viewer.data.clear();
+        viewer.data.set_mesh(V, F);
+        viewer.data.set_colors(Cols);
+        return true;
+      }
+      return false;
+    };
+
+  Eigen::MatrixXd V;
+  Eigen::MatrixXi F;
+  Eigen::VectorXi I;
+  marching_tets(TV, TT, VH, offset, V, F, I);
+  Eigen::VectorXd C(V.rows());
+  for (int i = 0; i < C.rows(); ++i) {
+    if (I(i) == -1) {
+      C(i) = offset;
+    } else {
+      C(i) = VH(I(i));
+    }
+  }
+  Eigen::MatrixXd Cols;
+  igl::jet(C, true, Cols);
+  viewer.data.clear();
+  viewer.data.set_mesh(V, F);
+  viewer.data.set_colors(Cols);
+  viewer.launch();
+}
+
 
 void combineMesh(const vector<Eigen::MatrixXd> &Vs,
                  const vector<Eigen::MatrixXi> &Fs,
@@ -423,7 +493,7 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
   }
 
   // Also make sure it's manifold.
-  extractManifoldPatch(V2, F2, M2);
+  //extractManifoldPatch(V2, F2, M2);
 }
 
 } // namespace Helpers

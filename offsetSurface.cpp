@@ -16,6 +16,7 @@
 
 #include "glob_defs.h"
 #include "Helpers.h"
+#include "marching_tets.h"
 
 #define OFFSET_DEBUG 0
 
@@ -210,7 +211,8 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  const Eigen::MatrixXi &TT,
                                  const Eigen::VectorXi &TO,
                                  const Eigen::VectorXd &C, double off,
-                                 Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff) {
+                                 Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff,
+                                 Eigen::VectorXi &Ooff) {
   std::vector<int> s;
   for (int i = 0; i < TT.rows(); ++i) {
     // Either all tet corners are within the offset
@@ -272,5 +274,28 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
   igl::unique_rows(Foff, Fu,unique_to_all,all_to_unique);
   Foff = Fu;
 }
+
+void marchingOffsetSurface(
+    const Eigen::MatrixXd &V,
+    const Eigen::MatrixXi &TT,
+    const Eigen::VectorXi &TO,
+    const Eigen::VectorXd &C, double off,
+    Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff) {
+  // Run marching tets.
+  Eigen::VectorXi I;
+  marching_tets(V, TT, C, off, Voff, Foff, I);
+  // Need to update the marker values.
+  Ooff.resize(Voff.rows());
+  for (int i = 0; i < Ooff.rows(); ++i) {
+    if (I(i) == -1) {
+      Ooff(i) = GLOBAL::nonoriginal_marker;
+    } else {
+      Ooff(i) = TO(I(i));
+    }
+  }
+
+  Helpers::viewTriMesh(Voff, Foff, Ooff);
+}
+
 
 } // namespace OffsetSurface

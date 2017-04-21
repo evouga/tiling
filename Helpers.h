@@ -28,6 +28,9 @@ void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  const Eigen::VectorXi &O);
 
+void offsetViewer(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT,
+                  const Eigen::VectorXd &VH);
+
 void combineMesh(const std::vector<Eigen::MatrixXd> &Vs,
                  const std::vector<Eigen::MatrixXi> &Fs,
                  const std::vector<Eigen::VectorXi> &Ms,

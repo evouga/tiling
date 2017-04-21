@@ -1,0 +1,454 @@
+#include "offsetSurface.h"
+
+#include <map>
+#include <vector>
+
+#include <CGAL/Complex_2_in_triangulation_3.h>
+#include <CGAL/Implicit_surface_3.h>
+#include <CGAL/interpolation_functions.h>
+#include <CGAL/make_surface_mesh.h>
+#include <CGAL/natural_neighbor_coordinates_3.h>
+#include <CGAL/Surface_mesh_default_triangulation_3.h>
+
+#include <igl/copyleft/cgal/complex_to_mesh.h>
+
+#define HIGHEST_TEMP  100.
+
+#define OFFSET_DEBUG 1
+//#define OFF_MINUS
+
+namespace OffsetSurface {
+
+// Needed CGAL typedefs
+// For the triangulation
+typedef Triangulation_t::Cell_handle      Cell_handle;
+typedef Triangulation_t::Vertex_handle    Vertex_handle;
+typedef Triangulation_t::Locate_type      Locate_type;
+typedef Triangulation_t::Point            Point;
+// default triangulation for Surface_mesher
+typedef CGAL::Surface_mesh_default_triangulation_3 CTr;
+typedef CGAL::Complex_2_in_triangulation_3<CTr> C2t3;
+typedef CTr::Geom_traits          GT;
+typedef GT::Sphere_3              Sphere_3;
+typedef GT::Point_3               Point_3;
+typedef GT::FT                    FT;
+//typedef FT (*Function)(Point_3);
+typedef std::function<FT (Point_3)> Function;
+typedef CGAL::Implicit_surface_3<GT, Function> Surface_3;
+
+namespace {
+
+void sortNums(int &a, int &b, int &c) {
+  int e, f, g;
+
+  if (a < b) {
+    if (a < c) {
+      return;
+    } else {
+      e = c; f = a; g = b;
+    }
+  } else {
+    if (a < c) {
+      e = b; f = a; g = c;
+    } else {
+      if (b < c) {
+        e = b; f = c; g = a;
+      } else {
+        e = c; f = b; g = a;
+      }
+    }
+  }
+  a = e; b = f; c = g;
+}
+
+void writeTriangulation(const std::string &fn, 
+                        const Eigen::MatrixXd &V, 
+                        const Eigen::MatrixXi &T) {
+  FILE* ofs = fopen(fn.c_str(), "w");
+  // First, write the dimension
+  fprintf(ofs, "%d\n", 3);
+  // Write the number of points, then all the points
+  fprintf(ofs, "%d\n", V.rows());
+  for (int i = 0; i < V.rows(); ++i) {
+    fprintf(ofs, "%f %f %f\n", V(i,0), V(i,1), V(i,2));
+  }
+  // Then, write the number of cells and each cell
+  // Also, generate the rows of each tet along the way.
+  std::map<std::vector<int>, std::vector<int> > same_faces;
+  fprintf(ofs, "%d\n", T.rows());
+  for (int i = 0; i < T.rows(); ++i) {
+    // Indexed by 1, not 0 (because of implicit infitity vertex
+    fprintf(ofs, "%d %d %d %d\n",
+           T(i, 0) + 1, T(i, 1) + 1, T(i, 2) + 1, T(i, 3) + 1);
+
+    for (int j = 0; j < 4; ++j) {
+      int a = T(i, j);
+      int b = T(i, (j+1)%4);
+      int c = T(i, (j+2)%4);
+      sortNums(a, b, c);
+      same_faces[{a, b, c}].push_back(i);
+    }
+  }
+
+  // Generate all the neighbors of each Tet
+  for (int i = 0; i < T.rows(); ++i) {
+    // Loop over each face
+    for (int j = 0; j < 4; ++j) {
+      int a = T(i, j);
+      int b = T(i, (j+1)%4);
+      int c = T(i, (j+2)%4);
+      sortNums(a, b, c);
+      const std::vector<int> &same = same_faces[{a,b,c}];
+
+      if (same.size() == 1) {
+        // One of my neighbors is the infinity vertex
+        fprintf(ofs, "0 ");
+      } else {
+        // Find which one is not me
+        if (same[0] == i) {
+          assert(same[1] != i && "incorrect vertex???");
+          fprintf(ofs, "%d ", same[1] + 1);
+        } else {
+          assert(same[0] != i && "incorrect vertex???");
+          fprintf(ofs, "%d ", same[0] + 1);
+        }
+      }
+    }
+    fprintf(ofs, "\n");
+  }
+  fclose(ofs);
+}
+
+} // namespace
+
+// Macro for easier access. Will throw an error if it doesn't actually
+// find it. But that's a problem for you to handle.
+int printErr() {
+  //fprintf(stderr,"ERR: Not fond!!\n");
+  printf("ERR: Not fond!!\n");
+  return 0;
+}
+#define VAL_AT(p) ( tr_to_idx.find(p->point()) == tr_to_idx.end() ? \
+                   printErr() : \
+                   C(tr_to_idx.find(p->point())->second) )
+#define VAL_AT_p(p) ( tr_to_idx.find(p) == tr_to_idx.end() ? \
+                   printErr() : \
+                   C(tr_to_idx.find(p)->second) )
+
+/*
+ * Function to call when you have a triangulation.
+ */
+void generateOffsetSurface(Triangulation &T, double off,
+                           Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff) {
+  const Triangulation_t &Tr = T._Tr;
+  //const std::map<Triangulation_t::Point, K::FT, K::Less_xyz_3> tr_to_idx;
+  std::map<Triangulation_t::Point, K::FT, K::Less_xyz_3> tr_to_idx = T._tr_to_idx;
+  //const std::map<Vertex_handle, int> tr_to_idx = T._tr_to_idx;
+  const Eigen::MatrixXd &V = T._V;
+  const Eigen::VectorXd &C = T._C;
+
+  // Code borrowed from igl: https://github.com/libigl/libigl/blob/master/include/igl/copyleft/cgal/signed_distance_isosurface.cpp
+  const auto &Vmax = V.colwise().maxCoeff();
+  const auto &Vmin = V.colwise().minCoeff();
+  const double bbd = (Vmax-Vmin).norm();
+  const double r = bbd/2.;
+  const auto &Vmid = 0.5*(Vmax + Vmin);
+
+  Point_3 cmid(Vmid(0), Vmid(1), Vmid(2));
+  /*
+  Function nn = [&](const Point_3 &q) -> FT
+    {
+      auto vec = q - CGAL::ORIGIN;
+
+      std::vector< std::pair< Point, K::FT> > coords;
+      auto norm = CGAL::laplace_natural_neighbor_coordinates_3
+          (Tr, q,std::back_inserter(coords), 1.).second;
+      K::FT res = CGAL::linear_interpolation(
+          coords.begin(), coords.end(), norm,
+          CGAL::Data_access<std::map<Point, K::FT, K::Less_xy_2> >(tr_to_idx));
+#ifdef OFF_MINUS
+      return off - res;
+#else
+      return res - off;
+#endif
+    };
+    */
+  // Need the triangulation and the offset
+  Function fun = 
+      [&](const Point_3 &q) -> FT
+      {
+        Locate_type lt;
+        int li, lj;
+        // Locate the cell for this point. For details, see http://doc.cgal.org/latest/Triangulation_3/Triangulation_3_2simple_triangulation_3_8cpp-example.html
+        Cell_handle c = Tr.locate(q, lt, li, lj);
+        if (OFFSET_DEBUG) printf("# locating pts <- rbind(pts, c(%f,%f,%f, 'test'))\n", q.x(), q.y(), q.z());
+
+        if (lt == Triangulation_t::VERTEX) {
+          if (OFFSET_DEBUG) printf("# vertex\n");
+            // If it's a vertex, just return that value
+            //return c->vertex(li)->info() - off;
+          if (OFFSET_DEBUG) printf("%f %f %f %f 0\n",
+                                   q.x(), q.y(), q.z(), VAL_AT(c->vertex(li)));
+#ifdef OFF_MINUS
+          return off - VAL_AT(c->vertex(li));
+#else
+          return VAL_AT(c->vertex(li)) - off;
+#endif
+        } else if (lt == Triangulation_t::EDGE) {
+            // If it's an edge, interpolate between the two points of the edge
+            double t_dist = CGAL::squared_distance(c->vertex(li)->point(),
+                                                   c->vertex(lj)->point());
+            double d_p1 = CGAL::squared_distance(c->vertex(li)->point(), q);
+            double t = d_p1/t_dist;
+            //double p1 = c->vertex(li)->info();
+            //double p2 = c->vertex(lj)->info();
+            double p1 = VAL_AT(c->vertex(li));
+            double p2 = VAL_AT(c->vertex(lj));
+            if (OFFSET_DEBUG) printf("%f %f %f %f 1\n",
+                   c->vertex(lj)->point().x(),
+                   c->vertex(lj)->point().y(),
+                   c->vertex(lj)->point().z(),
+                   VAL_AT(c->vertex(lj)));
+            if (OFFSET_DEBUG) printf("%f %f %f %f 1\n",
+                   c->vertex(li)->point().x(),
+                   c->vertex(li)->point().y(),
+                   c->vertex(li)->point().z(),
+                   VAL_AT(c->vertex(li)));
+          if (OFFSET_DEBUG) printf("# edge, returning %lf\n", p1*(1-t)+p2*t-off);
+          if (OFFSET_DEBUG) printf("%f %f %f %f 0\n",
+                                   q.x(), q.y(), q.z(), (p1*(1-t)+p2*t));
+#ifdef OFF_MINUS
+            return off - (p1*(1-t)+p2*t);
+#else
+            return (p1*(1-t)+p2*t) - off;
+#endif
+        } else if (lt == Triangulation_t::OUTSIDE_CONVEX_HULL ||
+                   lt == Triangulation_t::OUTSIDE_AFFINE_HULL) {
+          if (OFFSET_DEBUG) printf("%f %f %f %f 0\n",
+                                   q.x(), q.y(), q.z(), 1.01);
+          if (OFFSET_DEBUG) printf("# Outside, returning %lf\n", HIGHEST_TEMP);
+          // If it's outside, we never want it to return a positive value
+          return HIGHEST_TEMP;
+        }
+
+        Eigen::MatrixXd mat(4, 4);
+        Eigen::Vector4d query(4);
+        for (int i = 0; i < 4; ++i) {
+          mat(0, i) = c->vertex(i)->point().x();
+          mat(1, i) = c->vertex(i)->point().y();
+          mat(2, i) = c->vertex(i)->point().z();
+          mat(3, i) = 1;
+            if (OFFSET_DEBUG) printf("%f %f %f %f 1\n",
+                   c->vertex(i)->point().x(),
+                   c->vertex(i)->point().y(),
+                   c->vertex(i)->point().z(),
+                   VAL_AT(c->vertex(i)));
+        }
+        query(0) = q.x();
+        query(1) = q.y();
+        query(2) = q.z();
+        query(3) = 1;
+
+        Eigen::Vector4d alpha = mat.inverse() * query;
+        double val = alpha(0)*VAL_AT(c->vertex(0)) +
+                     alpha(1)*VAL_AT(c->vertex(1)) +
+                     alpha(2)*VAL_AT(c->vertex(2)) +
+                     alpha(3)*VAL_AT(c->vertex(3));
+        /*
+        std::cout << "Mult is:\n"
+             << mat << "\n"
+             << mat.inverse() << "\n"
+             << query << "\n"
+             << alpha << "\n";
+             */
+        double col_val = 0;
+        for (int i = 0; i < 4; ++i) {
+          col_val += c->vertex(i)->point().x() +
+              c->vertex(i)->point().y() +
+              c->vertex(i)->point().z();
+        }
+        if (OFFSET_DEBUG) printf("%f %f %f %f 0\n",
+                                 q.x(), q.y(), q.z(), val);
+        if (OFFSET_DEBUG) printf("%f %f %f %f 2\n",
+                                 q.x(), q.y(), q.z(), col_val);
+#ifdef OFF_MINUS
+        return off - val;
+#else
+        return val - off;
+#endif
+            
+        typedef std::map<Point, K::FT, K::Less_xyz_3> K_map;
+        typedef CGAL::Data_access< K_map > Value_access;
+        K_map function_values;
+        std::vector< std::pair<Point, K::FT> > coords;
+        double total_dist = 0;
+        if (lt == Triangulation_t::FACET) {
+          if (OFFSET_DEBUG) printf("# Triangulation facet... inserting:\n");
+          // If it's a facet, need to interpolate between three points
+          for (int i = 0; i < 3; ++i) {
+            //if (OFFSET_DEBUG) printf("pts <- rbind(pts, c(%f,%f,%f, %f, 'real'))\n",
+            if (OFFSET_DEBUG) printf("%f %f %f %f 1\n",
+                   c->vertex((li+i)%4)->point().x(),
+                   c->vertex((li+i)%4)->point().y(),
+                   c->vertex((li+i)%4)->point().z(),
+                   VAL_AT(c->vertex((li+i)%4)));
+            function_values.insert(
+                std::make_pair(c->vertex((li+i)%4)->point(),
+                               VAL_AT(c->vertex((li+i)%4))));
+            coords.push_back(
+                std::make_pair(c->vertex((li+i)%4)->point(),
+                               VAL_AT(c->vertex((li+i)%4))));
+            total_dist += 1./CGAL::squared_distance(q, c->vertex((li+1)%4)->point());
+          }
+        } else if (lt == Triangulation_t::CELL) {
+          if (OFFSET_DEBUG) printf("# Triangulation cell... inserting:\n");
+          // All four points
+          for (int i = 0; i < 4; ++i) {
+            //if (OFFSET_DEBUG) printf("pts <- rbind(pts, c(%f,%f,%f, %f, 'real')\n",
+            if (OFFSET_DEBUG) printf("%f %f %f %f 1\n",
+                   c->vertex(i)->point().x(),
+                   c->vertex(i)->point().y(),
+                   c->vertex(i)->point().z(),
+                   VAL_AT(c->vertex(i)));
+            function_values.insert(
+                std::make_pair(c->vertex(i)->point(), VAL_AT(c->vertex(i))));
+            coords.push_back(
+                std::make_pair(c->vertex(i)->point(), VAL_AT(c->vertex(i))));
+            total_dist += 1./CGAL::squared_distance(q, c->vertex(i)->point());
+          }
+        }
+        K::FT res = CGAL::linear_interpolation(coords.begin(), coords.end(),
+                                               1.0, // norm(?) of 1
+                                               Value_access(function_values));
+        double total_res = 0;
+        for (int i = 0; i < coords.size(); ++i) {
+          double dd = CGAL::squared_distance(q, coords[i].first);
+          //total_res += (1. - dd/total_dist)*coords[i].second;
+          total_res += (1./dd)/total_dist * coords[i].second;
+        }
+        //if (OFFSET_DEBUG) printf("pts <- rbind(pts, c(%f, %f, %f, %f, 'pts'))\n",
+        if (OFFSET_DEBUG) printf("%f %f %f %f 0\n",
+                                 q.x(), q.y(), q.z(), total_res);
+        if (OFFSET_DEBUG) printf("#  = %f(vs%f)-%f=%f(vs%f)\n",
+                                 res,total_res, off,res - off, total_res - off);
+        // Get the interpolated value, return the difference from the offset.
+        //return res - off;
+#ifdef OFF_MINUS
+        return off - total_res;
+#else
+        return total_res - off;
+#endif
+      };
+
+  for (double x = -0.51; x <= 0.51; x += 0.02) {
+    for (double y = -0.51; y <= 0.51; y += 0.02) {
+      for (double z = -0.51; z <= 0.51; z += 0.02) {
+        Point_3 q(x, y, z);
+        fun(q);
+      }
+    }
+  }
+  fprintf(stderr, "Finished with grid!\n");
+  return;
+  // Now, find the surface
+  //Sphere_3 bounding_sphere(cmid, (r+off)*(r+off));
+  Sphere_3 bounding_sphere(cmid, r*r);  // squared radius
+  Surface_3 surface(fun, bounding_sphere);
+  // Use default values for angle bound, radius bound, distance bound (respectively)
+  //CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 0.2, 0.01);
+  CGAL::Surface_mesh_default_criteria_3<CTr> criteria(28, 1.1, 1.1);
+  // Mesh surface
+  CTr tr;  // 3D-Delaunay triangulation
+  C2t3 c2t3(tr); // 2D-complex in 3D-Delaunay triangulation
+  CGAL::make_surface_mesh(c2t3, surface, criteria, CGAL::Manifold_tag());
+  // Complex to (V,F)
+  igl::copyleft::cgal::complex_to_mesh(c2t3, Voff, Foff);
+}
+
+/**
+ * Initial function call, 'returns' the triangulation for successive calls
+ */
+void generateOffsetSurface(const Eigen::MatrixXd &V,
+                           const Eigen::MatrixXi &TT, const Eigen::VectorXd &C,
+                           double off, Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff,
+                           Triangulation &T) {
+
+  //std::vector<std::pair<Point, double> > points;
+  std::map<Triangulation_t::Point, K::FT, K::Less_xyz_3> tr_to_idx;
+  //std::map<Vertex_handle, int> tr_to_idx;
+  Triangulation_t &Tr = T._Tr;
+
+  writeTriangulation("triangulation.CGALTR", V, TT);
+  std::ifstream inT("triangulation.CGALTR", std::ios::in);
+  inT >> Tr;
+  std::ofstream ofT("triangulation.CGALTR2", std::ios::out);
+  ofT << Tr;
+
+  // Set up the tr_to_idx
+  for (int i = 0; i < V.rows(); ++i) {
+    tr_to_idx[Point(V(i,0), V(i,1), V(i,2))] = i;
+  }
+
+  /*
+  for (int i = 0; i < V.rows(); ++i) {
+    //T.insert(points.begin(), points.end());
+    auto handl = Tr.insert(Point(V(i, 0), V(i, 1), V(i, 2)));
+    if (tr_to_idx.find(handl) != tr_to_idx.end()) {
+      fprintf(stderr, "Error inserting vertex!!\n");
+    }
+    tr_to_idx[handl] = i;
+    //Point p(V(i, 0), V(i, 1), V(i, 2));
+    //tr_to_idx[p] = i;
+    //Tr.insert(p);
+    //points.push_back( std::make_pair(Point(V(i,0), V(i,1), V(i,2)), C(i)) );
+  }
+  */
+  T._tr_to_idx = tr_to_idx;
+  T._C = C;
+  T._V = V;
+
+  assert(Tr.number_of_vertices() == V.rows());
+  std::ofstream ofile("triangulation",std::ios::out);
+  ofile << Tr;
+  ofile.close();
+  fprintf(stderr, "Both have been written!\n");
+
+
+  generateOffsetSurface(T, off, Voff, Foff);
+}
+// Doesn't require the knowledge of CGAL
+void generateOffsetSurface(const Eigen::MatrixXd &V, const Eigen::VectorXd &C,
+                           double off, Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff) {
+  /*
+  // Needed CGAL typedefs
+  typedef Triangulation_t::Cell_handle    Cell_handle;
+  typedef Triangulation_t::Vertex_handle  Vertex_handle;
+  typedef Triangulation_t::Locate_type    Locate_type;
+  typedef Triangulation_t::Point          Point;
+  */
+  
+  //std::vector<std::pair<Point, double> > points;
+  std::map<Triangulation_t::Point, K::FT, K::Less_xyz_3> tr_to_idx;
+  //std::map<Vertex_handle, int> tr_to_idx;
+  Triangulation T;
+  Triangulation_t &Tr = T._Tr;
+  for (int i = 0; i < V.rows(); ++i) {
+    //T.insert(points.begin(), points.end());
+    /*
+    auto handl = Tr.insert(Point(V(i, 0), V(i, 1), V(i, 2)));
+    tr_to_idx[handl] = i;
+    */
+    Point p(V(i, 0), V(i, 1), V(i, 2));
+    tr_to_idx[p] = i;
+    Tr.insert(p);
+    //points.push_back( std::make_pair(Point(V(i,0), V(i,1), V(i,2)), C(i)) );
+  }
+  T._tr_to_idx = tr_to_idx;
+  T._C = C;
+  T._V = V;
+
+  generateOffsetSurface(T, off, Voff, Foff);
+}
+
+
+} // namespace OffsetSurface
