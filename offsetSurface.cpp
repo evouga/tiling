@@ -294,6 +294,7 @@ void marchingOffsetSurface(
     }
   }
 
+  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
   Helpers::viewTriMesh(Voff, Foff, Ooff);
 }
 

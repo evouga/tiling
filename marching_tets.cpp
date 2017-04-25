@@ -20,12 +20,12 @@
 #include <igl/remove_duplicate_vertices.h>
 #include <igl/remove_duplicates.h>
 #include <igl/resolve_duplicated_faces.h>
+#include <igl/writeOFF.h>
 
 #include "glob_defs.h"
 #include "Helpers.h"
 
 namespace {
-int oTimes[5];
 struct MarchingTetsDat {
   const Eigen::MatrixXd &V;
   const Eigen::VectorXd &H;
@@ -51,17 +51,23 @@ struct MarchingTetsDat {
 // two, where the result will be (how_much * a + (1 - how_much) * b) / 2
 //
 // Assume that aval is <= offset and bval >= offset.
+static double min_how_much = 1;
+static double max_how_much = 0;
 Eigen::RowVector3d split(const Eigen::RowVectorXd &a,
                          const Eigen::RowVectorXd &b,
                          double aval, double bval,
                          double offset) {
   Eigen::RowVector3d newP;
-  double how_much = (offset - aval) / (bval - aval);
-  if (how_much < 0 || how_much > 1) {
+  //double how_much = (offset - aval) / (bval - aval);
+  double how_much = (bval - offset) / (bval - aval);
+  if (how_much <= 0 || how_much >= 1) {
     fprintf(stderr, "Error: how_much is %lf (from %lf %lf %lf)\n",
             how_much, aval, bval, offset);
   }
-  return how_much * a + (1 - how_much) * b;
+  if (how_much < min_how_much) min_how_much = how_much;
+  if (how_much > max_how_much) max_how_much = how_much;
+
+  return how_much * a + (1.0 - how_much) * b;
 }
 
 
@@ -73,27 +79,24 @@ int getMapCounts(const std::map<std::vector<int>, int> &counts,
   }
   return counts.find(c)->second;
 }
-int getMapCounts(const std::map<std::vector<int>, int> &counts,
-                 const Eigen::RowVector3i &f) {
-  std::vector<int> t({f(0), f(1), f(2)});
-  return getMapCounts(counts, t);
-}
 bool isValid(std::vector<int> &c,
              const std::map<std::vector<int>, int> &counts,
              const Eigen::VectorXd &H) {
+  /*
+  for (int i = 0; i < c.size(); ++i) {
+    int next = (i + 1) % 3;
+    if (H(c[i]) == H(c[next])) {
+      return false;
+    }
+  }
+  */
   return getMapCounts(counts, c) == 1;
 }
 bool isValid(const Eigen::RowVector3i &f,
              const std::map<std::vector<int>, int> &counts,
-             const Eigen::VectorXd &H,
-             bool test_temp = false) {
-  if (test_temp) {
-    for (int i = 0; i < 3; ++i) {
-      if (H(f(i)) == GLOBAL::outside_temp) return false;
-    }
-  }
-
-  return getMapCounts(counts, f) == 1;
+             const Eigen::VectorXd &H) {
+  std::vector<int> t({f(0), f(1), f(2)});
+  return isValid(t, counts, H);
 }
 
 void addOrig(const Eigen::RowVectorXi &T, int marker,
@@ -129,7 +132,6 @@ bool heatCheck(MarchingTetsDat &dd,
 
   // A couple of cases to be concerned about with temperature.
   if (inside_t.size() > 0 && outside_t.size() > 0) {
-    //return true;
     //addOrig(T, 5, dd.faces, dd.faces_markers); return true;
 
     // Impossible cases:
@@ -220,8 +222,6 @@ bool heatCheck(MarchingTetsDat &dd,
             break;
           }
         }
-        // TODO here
-
         int outV = T(outside[0]);
 
         // Create one new point.
@@ -246,16 +246,9 @@ bool heatCheck(MarchingTetsDat &dd,
           dd.faces_markers.push_back(marker);
         }
         // Bottom, always add.
-        if (1) {
-          printf("Diff is %lf vs %lf (%d vs %d)\n",
-                 dd.H(inV3), dd.H(outV), outside[0], outside_t[0]);
-          if (dd.V(inV1, 2) == dd.new_verts[h - dd.V.rows()][2]) {
-            printf("Error: Parallel!!\n");
-          }
-          Eigen::RowVector3i newF({inV1, inV2, h});
-          dd.faces.push_back(newF);
-          dd.faces_markers.push_back(marker);
-        }
+        Eigen::RowVector3i newF({inV1, inV2, h});
+        dd.faces.push_back(newF);
+        dd.faces_markers.push_back(marker);
         return true;
       } else {
         printf("[%s:%d] Warning: Unknown tet structure!!\n", __FILE__, __LINE__);
@@ -268,6 +261,8 @@ bool heatCheck(MarchingTetsDat &dd,
       //  - inside:2 (one inside_t), outside: 2 (one outside_t): 3 faces
       //  - inside:1 (inside_t), outside: 3 (one outside_t): 1 face
       if (inside.size() == 1) {
+        //addOrig(T, marker, dd.faces, dd.faces_markers); return true;
+        //  - inside:1 (inside_t), outside: 3 (one outside_t): 1 face
         int inV = T(inside[0]);
         int outV1, outV2;
         for (int i = 0; i < outside.size(); ++i) {
@@ -277,54 +272,64 @@ bool heatCheck(MarchingTetsDat &dd,
             break;
           }
         }
-        if (isValid({inV, outV1, outV2}, dd.face_counts, dd.H)) {
-          // add two new verts and one new face.
-          int newV_pos = dd.V.rows() + dd.new_verts.size();
-          dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV1),
-                                       dd.H(inV), dd.H(outV1), dd.offset));
-          dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV2),
-                                       dd.H(inV), dd.H(outV2), dd.offset));
-          int h1 = newV_pos, h2 = newV_pos + 1;
-          Eigen::RowVector3i newF({inV, h1, h2});
-          dd.faces.push_back(newF);
-          dd.faces_markers.push_back(marker);
-        }
+        // This face will always be on the frontier; add it.
+        // add two new verts and one new face.
+        int newV_pos = dd.V.rows() + dd.new_verts.size();
+        dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV1),
+                                     dd.H(inV), dd.H(outV1), dd.offset));
+        dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV2),
+                                     dd.H(inV), dd.H(outV2), dd.offset));
+        int h1 = newV_pos, h2 = newV_pos + 1;
+        Eigen::RowVector3i newF({inV, h1, h2});
+        dd.faces.push_back(newF);
+        dd.faces_markers.push_back(marker);
         return true;
       } else if (inside.size() == 2) {
         //  - inside:2 (one inside_t), outside: 2 (one outside_t): 3 faces
-        // 2 new verts and 4 new faces.
+        // 3 new verts and 5 new faces.
         int inV1 = T(inside_t[0]);
         int inV2 = T(inside[0]) == inV1 ? T(inside[1]) : T(inside[0]);
-        int outV1 = T(outside[0]), outV2 = T(outside[1]);
+        int outV1 = T(outside_t[0]);
+        int outV2 = T(outside[0]) == outV1 ? T(outside[1]) : T(outside[0]);
         int newV_pos = dd.V.rows() + dd.new_verts.size();
         dd.new_verts.push_back(split(dd.V.row(inV2), dd.V.row(outV1),
                                      dd.H(inV2), dd.H(outV1), dd.offset));
         dd.new_verts.push_back(split(dd.V.row(inV2), dd.V.row(outV2),
                                      dd.H(inV2), dd.H(outV2), dd.offset));
-        int h1 = newV_pos, h2 = newV_pos + 1;
+        dd.new_verts.push_back(split(dd.V.row(inV1), dd.V.row(outV2),
+                                     dd.H(inV1), dd.H(outV2), dd.offset));
+        int h21 = newV_pos, h22 = newV_pos + 1, h12 = newV_pos + 2;
         // Add back face
         if (isValid({inV2, outV1, outV2}, dd.face_counts, dd.H)) {
-          Eigen::RowVector3i newF({inV2, h1, h2});
+          Eigen::RowVector3i newF({inV2, h22, h21});
           dd.faces.push_back(newF);
           dd.faces_markers.push_back(marker);
         }
-        // Add side faces
-        if (isValid({inV1, inV2, outV1}, dd.face_counts, dd.H)) {
-          Eigen::RowVector3i newF({inV1, h1, inV2});
-          dd.faces.push_back(newF);
-          dd.faces_markers.push_back(marker);
-        }
+        // Add two faces for front.
         if (isValid({inV1, inV2, outV2}, dd.face_counts, dd.H)) {
-          Eigen::RowVector3i newF({inV1, inV2, h2});
+          Eigen::RowVector3i newF1({inV1, h12, inV2});
+          Eigen::RowVector3i newF2({inV2, h12, h22});
+          dd.faces.push_back(newF1);
+          dd.faces.push_back(newF2);
+          dd.faces_markers.push_back(marker);
+          dd.faces_markers.push_back(marker);
+        }
+        if (isValid({inV1, inV2, outV1}, dd.face_counts, dd.H)) {
+          // Add bottom face.
+          Eigen::RowVector3i newF({inV1, h21, inV2});
           dd.faces.push_back(newF);
           dd.faces_markers.push_back(marker);
         }
-        // Always add bottom face.
-        Eigen::RowVector3i newF({inV1, h1, h2});
-        dd.faces.push_back(newF);
+        // Always add inside faces
+        Eigen::RowVector3i newF1({inV1, h21, h12});
+        Eigen::RowVector3i newF2({h12, h21, h22});
+        dd.faces.push_back(newF1);
+        dd.faces.push_back(newF2);
+        dd.faces_markers.push_back(marker);
         dd.faces_markers.push_back(marker);
         return true;
       } else if (inside.size() == 3) {
+        // TODO
         //  - inside:3 (one inside_t), outside: 1 (outside_t): 5 faces
         // Create 2 new verts, 5 new faces
         int inV1 = T(inside_t[0]), inV2, inV3;
@@ -397,29 +402,79 @@ void case0Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
               const std::vector<int> &identical,
               const std::vector<int> &inside_t, const std::vector<int> &outside_t) {
   // Check the heat thing.
-  if(heatCheck(dd, inside,outside, inside_t,outside_t, T, 0)) return;
+  //if(heatCheck(dd, inside,outside, inside_t,outside_t, 0)) return;
+  //addOrig(T, 0, dd.faces, dd.faces_markers);
 
-  // Add all 4 faces.
-  Eigen::RowVector3i f1, f2, f3, f4;
-  f1 << T(0), T(1), T(3);
-  f2 << T(0), T(2), T(1);
-  f3 << T(3), T(2), T(0);
-  f4 << T(1), T(2), T(3);
-  if (isValid(f1, dd.face_counts, dd.H, true)) {
-    dd.faces.push_back(f1);
+  if (identical.size() == 3) {
+    addOrig(T, 0, dd.faces, dd.faces_markers);
+    int i1 = T(identical[0]), i2 = T(identical[1]), i3 = T(identical[2]);
+    Eigen::RowVector3i f({i1, i2, i3});
+    dd.faces.push_back(f);
     dd.faces_markers.push_back(0);
-  }
-  if (isValid(f2, dd.face_counts, dd.H, true)) {
-    dd.faces.push_back(f2);
-    dd.faces_markers.push_back(0);
-  }
-  if (isValid(f3, dd.face_counts, dd.H, true)) {
-    dd.faces.push_back(f3);
-    dd.faces_markers.push_back(0);
-  }
-  if (isValid(f4, dd.face_counts, dd.H, true)) {
-    dd.faces.push_back(f4);
-    dd.faces_markers.push_back(0);
+  } else if (identical.size() == 2) {
+    // Two possible faces.
+    Eigen::RowVector3i f1, f2;
+    int i1 = T(identical[0]), i2 = T(identical[1]);
+    int v1 = T(inside[0]), v2 = T(inside[1]);
+    f1 << i1, i2, v1;
+    f2 << i1, v2, i2;
+    if (isValid(f1, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f1);
+      dd.faces_markers.push_back(0);
+    }
+    if (isValid(f2, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f2);
+      dd.faces_markers.push_back(0);
+    }
+  } else if (identical.size() == 1) {
+    // Three possible faces.
+    int i1 = T(identical[0]);
+    int v1 = T(inside[0]), v2 = T(inside[1]), v3 = T(inside[2]);
+
+    Eigen::RowVector3i f1, f2, f3;
+    f1 << i1, v1, v2;
+    f2 << i1, v2, v3;
+    f3 << i1, v3, v1;
+    if (isValid(f1, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f1);
+      dd.faces_markers.push_back(0);
+    }
+    if (isValid(f2, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f2);
+      dd.faces_markers.push_back(0);
+    }
+    if (isValid(f2, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f2);
+      dd.faces_markers.push_back(0);
+    }
+  } else if (identical.size() == 0) {
+    if (outside.size()) {
+      printf("Unknown: in:%d out:%d\n", inside.size(), outside.size());
+    }
+    // Add all 4 faces.
+    Eigen::RowVector3i f1, f2, f3, f4;
+    f1 << T(0), T(1), T(3);
+    f2 << T(0), T(2), T(1);
+    f3 << T(3), T(2), T(0);
+    f4 << T(1), T(2), T(3);
+    if (isValid(f1, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f1);
+      dd.faces_markers.push_back(0);
+    }
+    if (isValid(f2, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f2);
+      dd.faces_markers.push_back(0);
+    }
+    if (isValid(f3, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f3);
+      dd.faces_markers.push_back(0);
+    }
+    if (isValid(f4, dd.face_counts, dd.H)) {
+      dd.faces.push_back(f4);
+      dd.faces_markers.push_back(0);
+    }
+  } else {
+    printf("[%s:%d] Warning: Unknown tet structure!!\n", __FILE__, __LINE__);
   }
 }
 
@@ -427,68 +482,179 @@ void case0Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
 //   inside: 1 outside: 3
 //   inside: 1 outside: 2 identical: 1
 //   inside: 1 outside: 1 identical: 2
+// (these are colored green)
 void case1In(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
              const std::vector<int> &inside, const std::vector<int> &outside,
              const std::vector<int> &identical,
              const std::vector<int> &inside_t, const std::vector<int> &outside_t) {
   
+  int marker = 2;
+
   // Check the heat thing.
   if(heatCheck(dd, inside,outside, inside_t,outside_t, T, 2)) return;
 
-  // Only one inside, need to divide each of the remaining three in half,
-  // then add one new face (ignore the other three)
-  int inV = T(inside[0]);
-  int outV1, outV2, outV3;
-  if (outside.size() == 3) {
-    outV1 = T(outside[0]);
-    outV2 = T(outside[1]);
-    outV3 = T(outside[2]);
-  } else if (outside.size() == 2) {
-    outV1 = T(outside[0]);
-    outV2 = T(outside[1]);
-    outV3 = T(identical[0]);
-  } else if (outside.size() == 1) {
-    outV1 = T(outside[0]);
-    outV2 = T(identical[0]);
-    outV3 = T(identical[1]);
-  }
+  if (identical.size() == 1) {
+    // Might have 4 new faces, 2 new verts.
+    Eigen::RowVector3i newF1, newF2, newF3, newF4, newF5;
+    int v1 = T(inside[0]);
+    int i1 = T(identical[0]);
+    int o1 = T(outside[0]), o2 = T(outside[1]);
+    // Create two new verts.
+    int newV_pos = dd.V.rows() + dd.new_verts.size();
+    dd.new_verts.push_back(split(dd.V.row(v1), dd.V.row(o1),
+                              dd.H(v1), dd.H(o1), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(v1), dd.V.row(o2),
+                              dd.H(v1), dd.H(o2), dd.offset));
+    int h1 = newV_pos, h2 = newV_pos + 1;
 
-  int newV_pos = dd.V.rows() + dd.new_verts.size();
-  dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV1),
-                            dd.H(inV), dd.H(outV1), dd.offset));
-  dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV2),
-                            dd.H(inV), dd.H(outV2), dd.offset));
-  dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV3),
-                            dd.H(inV), dd.H(outV3), dd.offset));
+    // 4 possible new faces.
+    // Always add back face.
+    Eigen::RowVector3i back({i1, h1, h2});
+    dd.faces.push_back(back);
+    dd.faces_markers.push_back(marker);
 
-  // Create the new faces.
-  Eigen::RowVector3i newF1, newF2, newF3, newF4;
-  // Don't care about normals here... Can fix later (?)
-  newF1 << newV_pos, newV_pos + 1, newV_pos + 2;
-  newF2 << inV, newV_pos, newV_pos + 1;
-  newF3 << inV, newV_pos + 1, newV_pos + 2;
-  newF4 << inV, newV_pos + 2, newV_pos;
-  // This face is automatically added.
-  dd.faces.push_back(newF1);
-  dd.faces_markers.push_back(2);
-  // Only add the rest of the faces if they're on a a boundary.
-  if (isValid({inV, outV1, outV2}, dd.face_counts, dd.H)) {
-    dd.faces.push_back(newF2);
-    dd.faces_markers.push_back(2);
-  }
-  if (isValid({inV, outV2, outV3}, dd.face_counts, dd.H)) {
-    dd.faces.push_back(newF3);
-    dd.faces_markers.push_back(2);
-  }
-  if (isValid({inV, outV3, outV1}, dd.face_counts, dd.H)) {
-    dd.faces.push_back(newF4);
-    dd.faces_markers.push_back(2);
+    // Side faces.
+    if (isValid({v1, o1, i1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, h1, i1});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+    }
+    if (isValid({v1, o2, i1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, i1, h2});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+    }
+    // Bottom face.
+    if (isValid({v1, o1, o2}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, h2, h1});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+    }
+  } else if (identical.size() == 2) {
+    // One new vert and 4 possible faces.
+    int v1 = T(inside[0]);
+    int i1 = T(identical[0]), i2 = T(identical[1]);
+    int o1 = T(outside[0]);
+    // Create one new vert.
+    int newV_pos = dd.V.rows() + dd.new_verts.size();
+    dd.new_verts.push_back(split(dd.V.row(v1), dd.V.row(o1),
+                              dd.H(v1), dd.H(o1), dd.offset));
+    int h1 = newV_pos;
+    // 4 possible faces
+    // Always add inside (top) face
+    Eigen::RowVector3i back({i1, i2, h1});
+    dd.faces.push_back(back);
+    dd.faces_markers.push_back(marker);
+    // Conditionally add side faces.
+    if (isValid({v1, i1, o1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, i1, h1});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+    }
+    if (isValid({v1, i2, o1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, h1, i2});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+    }
+    // Conditionally add bottom face.
+    if (isValid({v1, i1, i2}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, i2, i1});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+    }
+  // else if (identical.size() == 3)
+  // This case is covered by outside.size() == 0
+  } else if (identical.size() == 0) {
+    // Only one inside, need to divide each of the remaining three in half,
+    // then add one new face (ignore the other three)
+    int inV = T(inside[0]);
+    int outV1 = T(outside[0]), outV2 = T(outside[1]), outV3 = T(outside[2]);
+
+    int newV_pos = dd.V.rows() + dd.new_verts.size();
+    dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV1),
+                              dd.H(inV), dd.H(outV1), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV2),
+                              dd.H(inV), dd.H(outV2), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV3),
+                              dd.H(inV), dd.H(outV3), dd.offset));
+    int h1 = newV_pos, h2 = newV_pos + 1, h3 = newV_pos + 2;
+    if (inV == 281 && h3 == 5284) {
+      printf("%d, %d %d %d\n", inV, outV1, outV2, outV3);
+      printf("  %d,%d,%d\n", h1, h2, h3);
+      //marker = 7;
+      //addOrig(T, 7, dd.faces, dd.faces_markers);
+      //return;
+    } else if (inV == 281 && h3 == 7558) {
+      printf("-%d, %d %d %d\n", inV, outV1, outV2, outV3);
+      printf("-  %d,%d,%d\n", h1, h2, h3);
+      const auto& inVV = dd.V.row(inV);
+      const auto& h1V = dd.new_verts[h1 - newV_pos];
+      const auto& h2V = dd.new_verts[h2 - newV_pos];
+      const auto& h3V = dd.new_verts[h3 - newV_pos];
+      printf("   norms: %lf,%lf,%lf\n",
+             (h1V - dd.V.row(outV1)).norm(),
+             (h2V - dd.V.row(outV2)).norm(),
+             (h3V - dd.V.row(outV3)).norm());
+      printf("  verts:\n");
+      std::cout << inVV << std::endl;
+      std::cout << h1V << std::endl;
+      std::cout << h2V << std::endl;
+      std::cout << h3V << std::endl;
+      //addOrig(T, 7, dd.faces, dd.faces_markers);
+      marker = 7;
+    } else if (inV == 281) {
+      printf("+%d, %d %d %d\n", inV, outV1, outV2, outV3);
+      printf("+  %d,%d,%d\n", h1, h2, h3);
+    }
+
+    // Don't care about normals here.
+    Eigen::RowVector3i newF({h1, h2, h3});
+    // This face is automatically added.
+    dd.faces.push_back(newF);
+    dd.faces_markers.push_back(marker);
+    int plotted = 1;
+    // Only add the rest of the faces if they're on a a boundary.
+    if (isValid({inV, outV1, outV2}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({inV, h1, h2});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+      plotted++;
+    }
+    if (isValid({inV, outV2, outV3}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({inV, h2, h3});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+      plotted++;
+    }
+    if (isValid({inV, outV3, outV1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({inV, h3, h1});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(marker);
+      plotted++;
+    }
+
+    if (inV == 281 && h3 == 7558) {
+      printf("  plotted: %d\n", plotted);
+      printf("  z:%lf vs %lf,%lf,%lf\n", 
+             dd.V(inV, 2),
+             dd.new_verts[h1 - newV_pos][2],
+             dd.new_verts[h2 - newV_pos][2],
+             dd.new_verts[h3 - newV_pos][2]);
+      printf("    h: %lf;%lf,%lf,%lf\n", 
+             dd.H(inV),
+             dd.H(outV1),
+             dd.H(outV2),
+             dd.H(outV3));
+    }
+  } else {
+    printf("[%s:%d] Warning: Unknown tet structure!!\n", __FILE__, __LINE__);
   }
 }
 
 // (D) takes care of:
 //   inside: 2 outside: 1 identical: 1
 //   inside: 2 outside: 2 identical: 0
+// (these are colored red)
 void case2In2Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
                  const std::vector<int> &inside, const std::vector<int> &outside,
                  const std::vector<int> &identical,
@@ -496,69 +662,118 @@ void case2In2Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
   // 2 inside, 2 outside. Insert four faces between 4 points.
 
   // Check the heat thing.
-  if(heatCheck(dd, inside,outside, inside_t,outside_t, T, 3)) return;
+  if(heatCheck(dd, inside,outside, inside_t,outside_t, T, 4)) return;
 
-  int outV1 = T(outside[0]);
-  int outV2 = T(outside[1]);
-  int inV1 = T(inside[0]);
-  int inV2 = T(inside[1]);
+  if (identical.size() == 0) {
+    int outV1 = T(outside[0]);
+    int outV2 = T(outside[1]);
+    int inV1 = T(inside[0]);
+    int inV2 = T(inside[1]);
 
-  // Create 4 new points.
-  int newV_pos = dd.V.rows() + dd.new_verts.size();
-  dd.new_verts.push_back(split(dd.V.row(inV1), dd.V.row(outV1), // h11
-                            dd.H(inV1), dd.H(outV1), dd.offset));
-  dd.new_verts.push_back(split(dd.V.row(inV2), dd.V.row(outV1), // h21
-                            dd.H(inV2), dd.H(outV1), dd.offset));
-  dd.new_verts.push_back(split(dd.V.row(inV1), dd.V.row(outV2), // h12
-                            dd.H(inV1), dd.H(outV2), dd.offset));
-  dd.new_verts.push_back(split(dd.V.row(inV2), dd.V.row(outV2), // h22
-                            dd.H(inV2), dd.H(outV2), dd.offset));
+    // Create 4 new points.
+    int newV_pos = dd.V.rows() + dd.new_verts.size();
+    dd.new_verts.push_back(split(dd.V.row(inV1), dd.V.row(outV1), // h11
+                              dd.H(inV1), dd.H(outV1), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(inV2), dd.V.row(outV1), // h21
+                              dd.H(inV2), dd.H(outV1), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(inV1), dd.V.row(outV2), // h12
+                              dd.H(inV1), dd.H(outV2), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(inV2), dd.V.row(outV2), // h22
+                              dd.H(inV2), dd.H(outV2), dd.offset));
+    int h11 = newV_pos, h21 = newV_pos + 1;
+    int h12 = newV_pos + 2, h22 = newV_pos + 3;
 
-  // Create two faces
-  std::vector<std::vector<int> > newFs;
+    // Create two faces
+    std::vector<std::vector<int> > newFs;
 
-  // Special case:
-  // Front: i2, h22, h21
-  if (isValid({inV2, outV2, outV1}, dd.face_counts, dd.H)) {
-    newFs.push_back({inV2, newV_pos + 3, newV_pos + 1});
-  }
-  // Back: i1, h11, h12
-  if (isValid({inV1, outV1, outV2}, dd.face_counts, dd.H)) {
-    newFs.push_back({inV1, newV_pos, newV_pos + 2});
-  }
-  // Side: i2, i1, h22 + h12, i1, h22
-  if (isValid({inV1, inV2, outV2}, dd.face_counts, dd.H)) {
-    newFs.push_back({inV2,         inV1, newV_pos + 3});
-    newFs.push_back({newV_pos + 3, inV1, newV_pos + 2});
-  }
-  // Side: i2, i1, h21 + h21, i1, h11
-  if (isValid({inV1, inV2, outV1}, dd.face_counts, dd.H)) {
-    newFs.push_back({inV2,         inV1, newV_pos + 1});
-    newFs.push_back({newV_pos + 1, inV1, newV_pos});
-  }
-  // Always add these.
-  // Check that none of these are on the boundary.
-  //if (H(outV1) != GLOBAL::outside_temp && H(outV2) != GLOBAL::outside_temp) {
-  // Top: h22, h21, h12 + h12, h21, h11
-  newFs.push_back({newV_pos + 3, newV_pos + 1, newV_pos + 2});
-  newFs.push_back({newV_pos + 2, newV_pos + 1, newV_pos});
-  //}
+    // Special case:
+    // Front: i2, h22, h21
+    if (isValid({inV2, outV2, outV1}, dd.face_counts, dd.H)) {
+      newFs.push_back({inV2, h22, h21});
+    }
+    // Back: i1, h11, h12
+    if (isValid({inV1, outV1, outV2}, dd.face_counts, dd.H)) {
+      newFs.push_back({inV1, h11, h12});
+    }
+    // Side: i2, i1, h22 + h12, i1, h22
+    if (isValid({inV1, inV2, outV2}, dd.face_counts, dd.H)) {
+      newFs.push_back({inV2, inV1, h22});
+      newFs.push_back({h22,  inV1, h12});
+    }
+    // Side: i2, i1, h21 + h21, i1, h11
+    if (isValid({inV1, inV2, outV1}, dd.face_counts, dd.H)) {
+      newFs.push_back({inV2, inV1, h21});
+      newFs.push_back({h21,  inV1, h11});
+    }
+    // Always add these.
+    // Check that none of these are on the boundary.
+    // Top: h22, h21, h12 + h12, h21, h11
+    newFs.push_back({h22, h21, h12});
+    newFs.push_back({h12, h21, h11});
 
-  for (int i = 0; i < newFs.size(); ++i) {
-    Eigen::RowVector3i t({newFs[i][0], newFs[i][1], newFs[i][2]});
-    dd.faces.push_back(t);
+    for (int i = 0; i < newFs.size(); ++i) {
+      Eigen::RowVector3i t({newFs[i][0], newFs[i][1], newFs[i][2]});
+      dd.faces.push_back(t);
+      dd.faces_markers.push_back(4);
+    }
+  } else if (identical.size() == 1) {
+    //   inside: 2 outside: 1 identical: 1
+    // Create 2 new verts and (potentially) 5 new faces.
+    int o1 = T(outside[0]);
+    int v1 = T(inside[0]), v2 = T(inside[1]);
+    int i1 = T(identical[0]);
+    int newV_pos = dd.V.rows() + dd.new_verts.size();
+    dd.new_verts.push_back(split(dd.V.row(v1), dd.V.row(o1), // h11
+                              dd.H(v1), dd.H(o1), dd.offset));
+    dd.new_verts.push_back(split(dd.V.row(v2), dd.V.row(o1), // h21
+                              dd.H(v2), dd.H(o1), dd.offset));
+    int h11 = newV_pos, h21 = newV_pos + 1;
+
+    // Always add top (inside) face.
+    Eigen::RowVector3i top({i1, h21, h11});
+    dd.faces.push_back(top);
     dd.faces_markers.push_back(4);
+    // Conditionally add side faces.
+    if (isValid({v1, i1, o1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({i1, h11, v1});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(4);
+    }
+    if (isValid({v2, i1, o1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({i1, v2, h21});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(4);
+    }
+    // Conditionally add bottom face.
+    if (isValid({v1, v2, i1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f({v1, i1, v2});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(4);
+    }
+    // Conditionally add front faces.
+    if (isValid({v2, v1, o1}, dd.face_counts, dd.H)) {
+      Eigen::RowVector3i f1({v1, h11, v2});
+      Eigen::RowVector3i f2({v2, h11, h21});
+      dd.faces.push_back(f1);
+      dd.faces.push_back(f2);
+      dd.faces_markers.push_back(4);
+      dd.faces_markers.push_back(4);
+    }
+  } else {
+    printf("[%s:%d] Warning: Unknown tet structure!!\n", __FILE__, __LINE__);
   }
 }
 
 // (C) takes care of:
 //   inside: 3 outside: 1
+// (these are colored orange)
 void case3In1Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
                  const std::vector<int> &inside, const std::vector<int> &outside,
                  const std::vector<int> &identical,
                  const std::vector<int> &inside_t, const std::vector<int> &outside_t) {
   // Only one outside, need to divide each of the remaining three in half,
   // then add one new face.
+  //addOrig(T, 3, dd.faces, dd.faces_markers);
 
   // Check the heat thing.
   if(heatCheck(dd, inside,outside, inside_t,outside_t, T, 3)) return;
@@ -583,35 +798,24 @@ void case3In1Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
   // Two simple faces (bottom and top).
   if (isValid({inV1, inV2, inV3}, dd.face_counts, dd.H)) {
     newFs.push_back({inV1, inV2, inV3});
-    oTimes[0]++;
   }
-  // TODO: here
-  /*
-  if ((inV1 == 270 || inV2 == 270 || inV3 == 270) &&
-      (h1 == 2572 || h2 == 2572 || h3 == 2572))
-    addOrig(T, 3, dd.faces, dd.faces_markers);
-    */
   // Always add this one.
   newFs.push_back({h1, h2, h3});
-  oTimes[1]++;
   // 6 additional faces.
   // Front: i1, h1, i2 + i2, h1, h2
   if (isValid({inV1, inV2, outV}, dd.face_counts, dd.H)) {
     newFs.push_back({inV1, newV_pos, inV2});
     newFs.push_back({inV2, newV_pos, newV_pos + 1});
-    oTimes[2]++;
   }
   // Right: i2, i3, h2 + h2, i3, h3
   if (isValid({inV2, inV3, outV}, dd.face_counts, dd.H)) {
     newFs.push_back({inV2,         inV3, newV_pos + 1});
     newFs.push_back({newV_pos + 1, inV3, newV_pos + 2});
-    oTimes[3]++;
   }
   // Left: i3, h3, i1 + i1, h3, h1
   if (isValid({inV3, inV1, outV}, dd.face_counts, dd.H)) {
     newFs.push_back({inV3, newV_pos + 2, inV1});
     newFs.push_back({inV1, newV_pos + 2, newV_pos});
-    oTimes[4]++;
   }
 
   for (int i = 0; i < newFs.size(); ++i) {
@@ -649,6 +853,8 @@ void marching_tets(
   Eigen::MatrixXi& NF,
   Eigen::VectorXi& I)
 {
+  min_how_much = 1;
+  max_how_much = 0;
   using namespace Eigen;
   using namespace std;
 
@@ -674,23 +880,24 @@ void marching_tets(
   for (int i = 0; i < 6; i++) {
     times[i] = 0;
   }
-  for (int i= 0; i < 5; ++i) {
-    oTimes[i] = 0;
-  }
 
   // Create data structure.
   MarchingTetsDat dd(V, H, faces, faces_markers, face_counts, new_verts, offset);
 
+  int numEq = 0;
+
   // Check each tet face, add as needed.
   for (int i = 0; i < T.rows(); ++i) {
     // See if the tet is entirely inside.
-    vector<int> inside, outside, identical, inside_t, outside_t;
+    vector<int> inside, outside, inside_t, outside_t, identical;
     for (int j = 0; j < T.cols(); ++j) {
-      if (H(T(i, j)) >= offset) {
+      //if (H(T(i, j)) > offset + 1e-4) {
+      if (H(T(i, j)) > offset) {
         outside.push_back(j);
       } else if (H(T(i, j)) < offset) {
         inside.push_back(j);
       } else {
+        numEq++;
         identical.push_back(j);
       }
 
@@ -702,13 +909,29 @@ void marching_tets(
     }
 
     // Ignore this tet if it's entirely outside.
-    if (outside.size() == 4) continue;
+    if (outside.size() == 4) {
+      continue;
+    }
 
 
     if (outside.size() == 0 && inside.size() == 0) {
       // degenerate, ignore.
       printf("WARNING: degenerate tet face found!!\n");
+    } else if (inside.size() == 0 && identical.size() < 3) {
+      // Nothing to add.
+    } else if (identical.size() == 3) {
+      //addOrig(T.row(i), 7, dd.faces, dd.faces_markers);
+      // Ignore it if there's only one on the outside.
+      //if (inside.size() == 0) continue;
+      if (outside.size() == 0) continue;
+      times[1]++;
+      // Add just a single face (always)
+      int i1 = T(i,identical[0]), i2 = T(i,identical[1]), i3 = T(i,identical[2]);
+      Eigen::RowVector3i f({i1, i2, i3});
+      dd.faces.push_back(f);
+      dd.faces_markers.push_back(1);
     } else if (outside.size() == 0) {
+      // (these are colored blue)
       times[0]++;
       // (A) Takes care of:
       //   inside: 1, identical: 3 (remove three duplicated faces later)
@@ -716,10 +939,6 @@ void marching_tets(
       //   inside: 3, identical: 1 (remove all four duplicated faces later)
       //   inside: 4, identical: 0 (remove all four duplicated faces later)
       case0Out(dd, T.row(i), inside, outside, identical, inside_t, outside_t);
-    } else if (identical.size() == 3 && outside.size() == 1) {
-      times[1]++;
-      // Don't do anything here. Will have already added it, so we don't want
-      // to duplicate the face.
     } else if (inside.size() == 1) {
       // (these are colored green)
       times[2]++;
@@ -736,7 +955,7 @@ void marching_tets(
       //   inside: 3 outside: 1
       //
       case3In1Out(dd, T.row(i), inside, outside, identical, inside_t, outside_t);
-    } else if (inside.size() == 2 && outside.size() > 0) {
+    } else if (inside.size() == 2 && outside.size() >= 1) {
       // (these are colored red)
       times[4]++;
       // (D) takes care of:
@@ -746,8 +965,8 @@ void marching_tets(
       case2In2Out(dd, T.row(i), inside, outside, identical, inside_t, outside_t);
     } else {
       times[5]++;
-      fprintf(stderr, "WARN: marching tets found something weird, with in:%lu out:%lu =:%lu\n",
-              inside.size(), outside.size(), identical.size());
+      fprintf(stderr, "WARN: marching tets found something weird, with in:%lu out:%lu\n",
+              inside.size(), outside.size());
     }
   }
 
@@ -755,10 +974,9 @@ void marching_tets(
   for (int i = 0; i < 6; ++i) {
     printf("  %d: %d\n", i, times[i]);
   }
-  printf("Orange usages:\n");
-  for (int i= 0; i < 5; ++i) {
-    printf("  %d: %d\n", i, oTimes[i]);
-  }
+  printf("how_much is %lf and EPS is %lf\n", min_how_much, GLOBAL::EPS);
+  printf("     max is %lf\n", max_how_much);
+  printf("Num equal is %d\n", numEq);
 
   // Copy verts
   NV.resize(V.rows() + new_verts.size(), 3);
@@ -790,28 +1008,31 @@ void marching_tets(
   Eigen::MatrixXi newF;
   Eigen::VectorXi SVJ, SVI, I2;
   Helpers::viewTriMesh(NV, NF, facesMarkers);
+  igl::writeOFF("offset_mesh.off", NV, NF);
 
-  //igl::collapse_small_triangles(NV, NF, 1e-6, newF);
-  //NF = newF;
-
-  // Step 2: Remove all duplicate verts
   /*
-  igl::remove_duplicate_vertices(NV, GLOBAL::EPS, newV, SVI, SVJ);
-  I2.resize(newV.rows());
-  for (int i = 0; i < newV.rows(); ++i) {
-    I2(i) = I(SVI(i));
-  }
-  I = I2;
-  for (int i = 0; i < NF.rows(); ++i) {
-    for (int j = 0; j < NF.cols(); ++j) {
-      NF(i, j) = SVJ(NF(i, j));
-    }
-  }
-  NV = newV;
-  //Helpers::viewTriMesh(NV, NF, I);
+  igl::collapse_small_triangles(NV, NF, 1e-6, newF);
+  NF = newF;
   */
 
-  Helpers::removeDuplicates(NV, NF, I);
+  igl::remove_duplicate_vertices(NV, NF, 1e-12, newV, SVI, SVJ, newF);
+  I2.resize(newV.rows());
+  I2.setConstant(-1);
+  for (int i = 0; i < NV.rows(); ++i) {
+    if (I2(SVJ(i)) == -1) {
+      I2(SVJ(i)) = I(i);
+    } else {
+      I2(SVJ(i)) = std::min(I2(SVJ(i)), I(i));
+    }
+  }
+  NF = newF;
+  NV = newV;
+  I = I2;
+
+  // Now see if we have duplicated faces.
+  igl::resolve_duplicated_faces(NF, newF, SVJ);
+  NF = newF;
+  //Helpers::removeDuplicates(NV, NF, I);
 
   igl::remove_unreferenced(NV, NF, newV, newF, SVI, SVJ);
   I2.resize(newV.rows());
@@ -835,5 +1056,5 @@ void marching_tets(
   NF = newF;
   igl::orient_outward(NV, NF, C, newF, SVJ);
   NF = newF;
+  igl::writeOFF("offset_mesh_normals.off", NV, NF);
 }
-
