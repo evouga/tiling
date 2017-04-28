@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <map>
+#include <utility>
 
 #include <CGAL/Complex_2_in_triangulation_3.h>
 #include <CGAL/Implicit_surface_3.h>
@@ -13,12 +14,175 @@
 #include <igl/exterior_edges.h>
 #include <igl/in_element.h>
 #include <igl/unique.h>
+#include <igl/collapse_edge.h>
+#include <igl/unique_edge_map.h>
+#include <igl/edge_flaps.h>
 
 #include "glob_defs.h"
 #include "Helpers.h"
 #include "marching_tets.h"
 
 #define OFFSET_DEBUG 0
+
+using namespace std;
+
+// begin namespace for helper methods.
+namespace {
+
+// Returns list of (a, b) pairs, where "a" is the vertex to keep.
+vector<pair<int, int> > getEdgesToRemove(const Eigen::MatrixXi &F,
+                                         const Eigen::MatrixXi &O) {
+  vector<pair<int, int> > to_remove;
+
+  for (int i = 0; i < F.rows(); i++) {
+    // Look at every edge in the face.
+    for (int j = 0; j <= 3; j++) {
+      int a = F(i, j % 3);
+      int b = F(i, (j + 1) % 3);
+
+      // Need to remove if one in, one out.
+      bool a_out_b_in = (O(a) == GLOBAL::nonoriginal_marker &&
+                         O(b) != GLOBAL::nonoriginal_marker);
+      bool b_out_a_in = (O(b) == GLOBAL::nonoriginal_marker &&
+                         O(a) != GLOBAL::nonoriginal_marker);
+
+      // Need to remove.
+      if (a_out_b_in || b_out_a_in) {
+        // Make sure a is in, b is out.
+        if (a_out_b_in)
+          swap(a, b);
+
+        to_remove.push_back(make_pair(a, b));
+      }
+    }
+  }
+
+  return to_remove;
+}
+
+bool removeEdge(Eigen::MatrixXd &V, Eigen::MatrixXi &F, int a, int b) {
+  // Getting E, EMAP.
+  Eigen::MatrixXi E;
+  Eigen::VectorXi EMAP;
+  Eigen::MatrixXi unused_uE;
+  vector<vector<int> > unused_uE2e;
+  igl::unique_edge_map(F, E, unused_uE, EMAP, unused_uE2e);
+
+  // Getting EF, EI.
+  Eigen::MatrixXi EF;
+  Eigen::MatrixXi EI;
+  igl::edge_flaps(F, E, EMAP, EF, EI);
+
+  // Edge to collapse.
+  int e = -1;
+
+  // Look for the edge.
+  for (int i = 0; i < E.rows(); i++) {
+    if (E(i, 0) == a && E(i, 1) == b)
+      e = i;
+    if (E(i, 0) == b && E(i, 1) == a)
+      e = i;
+  }
+
+  // Edge was deleted in a previous collapse.
+  if (e == -1)
+    return false;
+
+  return igl::collapse_edge(e, V.row(a), V, F, E, EMAP, EF, EI);
+}
+
+// A collapsed face is [0, 0, 0].
+bool isDeadFace(const Eigen::RowVectorXi &face) {
+  for (int i = 0; i < 3; i++) {
+    if (face(i) != 0)
+      return false;
+  }
+  return true;
+}
+
+// Removes all faces that are [0, 0, 0].
+void cleanupDeadFaces(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
+                      const Eigen::VectorXi &O_old,
+                      Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
+                      Eigen::VectorXi &O_new) {
+  // Find number alive.
+  int number_alive = 0;
+  for (int i = 0; i < F_old.rows(); i++) {
+    if (isDeadFace(F_old.row(i)))
+      continue;
+
+    number_alive++;
+  }
+
+  // Remove the dead faces.
+  Eigen::MatrixXi F_prepared(number_alive, 3);
+  int next_spot = 0;
+  for (int i = 0; i < F_old.rows(); i++) {
+    if (isDeadFace(F_old.row(i)))
+      continue;
+
+    F_prepared.row(next_spot++) = F_old.row(i);
+  }
+
+  // Mapping from old index to new index. New index is -1 if removed.
+  Eigen::VectorXi I;
+  igl::remove_unreferenced(V_old, F_prepared, V_new, F_new, I);
+
+  // Update markers.
+  O_new.resize(V_new.rows());
+  O_new.setZero();
+
+  for (int i = 0; i < O_old.rows(); i++) {
+    // Vertex was removed.
+    if (I(i) == -1)
+      continue;
+
+    O_new(I(i)) = max(O_new(I(i)), O_old(i));
+  }
+}
+
+// Remove N1 neighbors of contour vertices.
+void removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
+                const Eigen::VectorXi &O_old,
+                Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
+                Eigen::VectorXi &O_new) {
+  // Initialze new points.
+  Eigen::MatrixXd V_tmp = V_old;
+  Eigen::MatrixXi F_tmp = F_old;
+  Eigen::VectorXi O_tmp = O_old;
+
+  vector<pair<int, int> > to_remove = getEdgesToRemove(F_old, O_old);
+  set<int> have_removed;
+
+  // Decimate the edges.
+  for (auto a_b : to_remove) {
+    // Want to get rid of vertex b.
+    int a = a_b.first;
+    int b = a_b.second;
+
+    // Merge the vertices onto a.
+    V_tmp.row(b) = V_tmp.row(a);
+    O_tmp(b) = O_tmp(a);
+
+    // Have already removed b.
+    if (b > a && have_removed.find(b) != have_removed.end())
+      continue;
+    if (a > b && have_removed.find(a) != have_removed.end())
+      continue;
+
+    // Collapsed faces will be [0, 0, 0].
+    if (removeEdge(V_tmp, F_tmp, a, b)) {
+      if (b > a)
+        have_removed.insert(b);
+      if (a > b)
+        have_removed.insert(a);
+    }
+  }
+
+  cleanupDeadFaces(V_tmp, F_tmp, O_tmp, V_new, F_new, O_new);
+}
+  
+} // end namespace for helper methods.
 
 namespace OffsetSurface {
 
@@ -284,6 +448,7 @@ void marchingOffsetSurface(
   // Run marching tets.
   Eigen::VectorXi I;
   marching_tets(V, TT, C, off, Voff, Foff, I);
+
   // Need to update the marker values.
   Ooff.resize(Voff.rows());
   for (int i = 0; i < Ooff.rows(); ++i) {
@@ -294,9 +459,22 @@ void marchingOffsetSurface(
     }
   }
 
-  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
-  Helpers::viewTriMesh(Voff, Foff, Ooff);
-}
+  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5);
 
+  Eigen::MatrixXd V_new;
+  Eigen::MatrixXi F_new;
+  Eigen::VectorXi O_new;
+
+  removeRing(Voff, Foff, Ooff, V_new, F_new, O_new);
+
+  // Debug.
+  cout << (Voff.rows() - V_new.rows()) << " vertices removed." << endl;
+  cout << (Foff.rows() - F_new.rows()) << " faces removed." << endl;
+
+  cout << "old" << endl;
+  Helpers::viewTriMesh(Voff, Foff, Ooff);
+  cout << "new" << endl;
+  Helpers::viewTriMesh(V_new, F_new, O_new);
+}
 
 } // namespace OffsetSurface

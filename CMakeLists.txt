@@ -66,17 +66,8 @@ message("libIGL extra sources: ${LIBIGL_EXTRA_SOURCES}")
 message("libIGL extra libraries: ${LIBIGL_EXTRA_LIBRARIES}")
 message("libIGL definitions: ${LIBIGL_DEFINITIONS}")
 
-# # Also need ibtourtre
-# find_package(libtourtre REQUIRED)
-# 
-# if (NOT LIBTOURTRE_FOUND)
-#   message(FATAL_ERROR "libtourtre not found -- You can download it using: \n git clone https://github.com/sedillard/libtourtre.git")
-# endif(NOT LIBTOURTRE_FOUND)
-# message("libtourtre includes: ${LIBTOURTRE_INCLUDE_DIR}")
-# message("libtourtre lib: ${LIBTOURTRE_LIB}")
-
 ### Prepare the build environment
-include_directories(${LIBIGL_INCLUDE_DIRS} ${LIBTOURTRE_INCLUDE_DIR})
+include_directories(${LIBIGL_INCLUDE_DIRS})
 add_definitions(${LIBIGL_DEFINITIONS})
 
 ### Add your project files
@@ -94,9 +85,6 @@ add_executable(test_harmonic_bin test_harmonic.cpp
   ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
-add_executable(test_contour_tree contourtree.cpp TilingUtils.cpp ${LIBIGL_EXTRA_SOURCES} offsetSurface.cpp)
-target_link_libraries(test_contour_tree ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
-
 add_executable(test_icoso_tile icoso_tile.cpp  ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_icoso_tile ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
@@ -108,4 +96,4 @@ target_link_libraries(tiler_main ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 # From the build directory -
 #   $ make -j3 tiler_debugger && ./tiler_debugger < ../debug/tiler_debugger.in
 add_executable(tiler_debugger debug/tiler_debugger.cpp ${SRCFILES})
-target_link_libraries(tiler_debugger ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})
+target_link_libraries(tiler_debugger ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})

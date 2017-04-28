@@ -11,7 +11,6 @@
 
 #include <Eigen/Core>
 
-#include <igl/collapse_small_triangles.h>
 #include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/copyleft/cgal/remesh_self_intersections.h>
 #include <igl/cotmatrix.h>
@@ -33,8 +32,8 @@ namespace Helpers {
 // Determines if each edge is manifold or not.
 bool is_edge_manifold(const Eigen::MatrixXi &F,
                       Eigen::VectorXi &M) {
-  std::map<std::pair<int,int>, int> edge_count;
-  std::vector<std::vector<std::pair<int,int> > > f2e;
+  map<pair<int,int>, int> edge_count;
+  vector<vector<pair<int,int> > > f2e;
 
   // Get all the edge counts, and the map from edges back to faces.
   for (int i = 0; i < F.rows(); ++i) {
@@ -47,10 +46,12 @@ bool is_edge_manifold(const Eigen::MatrixXi &F,
 
       if (u > v) {int t = u; u = v; v = t;}
 
-      edge_count[std::make_pair(u, v)] ++;
-      f2e[i].push_back(std::make_pair(u, v));
+      edge_count[make_pair(u, v)] ++;
+      f2e[i].push_back(make_pair(u, v));
     }
   }
+
+  bool is_manifold = true;
 
   // Report which ones are non-manifold.
   M.resize(F.rows());
@@ -59,9 +60,12 @@ bool is_edge_manifold(const Eigen::MatrixXi &F,
     for (const auto& e : f2e[i]) {
       if (edge_count[e] > 2) {
         M(i) = max(M(i), edge_count[e]);
+        is_manifold = false;
       }
     }
   }
+
+  return is_manifold;
 }
 
 
@@ -209,7 +213,7 @@ void tetrahedralize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   sprintf(buffer, "Qpq%fY", GLOBAL::TET_RATIO);
 
   // This prints out a number for some reason.
-  printf("[%s:%u] The igl tetrahedralize function produces this output: ", __FILE__, __LINE__);
+  printf("[%s:%u] igl:tetrahedralize: ", __FILE__, __LINE__);
   igl::copyleft::tetgen::tetrahedralize(V, F, VM, FM, buffer, TV, TT, TF, TO);
   printf("\n");
 
@@ -254,6 +258,10 @@ void set_viewer(igl::viewer::Viewer &viewer,
       continue;
 
     viewer.data.add_label(V.row(i), to_string(M(i)));
+
+    if (M(i) == -100 || M(i) == 100)
+      continue;
+
     used.insert(M(i));
   }
 }
