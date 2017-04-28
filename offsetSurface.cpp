@@ -17,6 +17,7 @@
 #include <igl/collapse_edge.h>
 #include <igl/unique_edge_map.h>
 #include <igl/edge_flaps.h>
+#include <igl/adjacency_list.h>
 
 #include "glob_defs.h"
 #include "Helpers.h"
@@ -30,71 +31,88 @@ using namespace std;
 namespace {
 
 // Returns list of (a, b) pairs, where "a" is the vertex to keep.
-vector<pair<int, int> > getEdgesToRemove(const Eigen::MatrixXi &F,
+vector<pair<int, int> > getEdgesToRemove(const Eigen::MatrixXd &V,
+                                         const vector<vector<int> > &graph,
                                          const Eigen::MatrixXi &O) {
+  // The boundary vertices.
+  double z_min = 1e10;
+  double z_max = -1e10;
+
+  for (int i = 0; i < V.rows(); i++) {
+    z_min = min(z_min, V(i, 2));
+    z_max = max(z_max, V(i, 2));
+  }
+
+  // Create [a, b] pairs, where a is on the contour.
   vector<pair<int, int> > to_remove;
 
-  for (int i = 0; i < F.rows(); i++) {
-    // Look at every edge in the face.
-    for (int j = 0; j <= 3; j++) {
-      int a = F(i, j % 3);
-      int b = F(i, (j + 1) % 3);
+  for (int a = 0; a < graph.size(); a++) {
+    // If a is not on the contour, ignore it.
+    if (O(a) == GLOBAL::nonoriginal_marker)
+      continue;
 
-      // Need to remove if one in, one out.
-      bool a_out_b_in = (O(a) == GLOBAL::nonoriginal_marker &&
-                         O(b) != GLOBAL::nonoriginal_marker);
-      bool b_out_a_in = (O(b) == GLOBAL::nonoriginal_marker &&
-                         O(a) != GLOBAL::nonoriginal_marker);
+    for (int b : graph[a]) {
+      // If b is on the contour, ignore it.
+      if (O(b) != GLOBAL::nonoriginal_marker)
+        continue;
 
-      // Need to remove.
-      if (a_out_b_in || b_out_a_in) {
-        // Make sure a is in, b is out.
-        if (a_out_b_in)
-          swap(a, b);
+      double z = V(b, 2);
 
+      // Vertex b lies on the boundary.
+      if (abs(z - z_min) <= 1e-5 || abs(z - z_max) <= 1e-5)
         to_remove.push_back(make_pair(a, b));
-      }
     }
   }
 
   return to_remove;
 }
 
-bool removeEdge(Eigen::MatrixXd &V, Eigen::MatrixXi &F, int a, int b) {
-  // Getting E, EMAP.
-  Eigen::MatrixXi E;
-  Eigen::VectorXi EMAP;
-  Eigen::MatrixXi unused_uE;
-  vector<vector<int> > unused_uE2e;
-  igl::unique_edge_map(F, E, unused_uE, EMAP, unused_uE2e);
+// Collapse vertex b onto vertex a.
+bool removeEdge(int a, int b, Eigen::MatrixXi &F,
+                vector<vector<int> > &vertex_to_faces) {
+  bool found_b = false;
 
-  // Getting EF, EI.
-  Eigen::MatrixXi EF;
-  Eigen::MatrixXi EI;
-  igl::edge_flaps(F, E, EMAP, EF, EI);
-
-  // Edge to collapse.
-  int e = -1;
-
-  // Look for the edge.
-  for (int i = 0; i < E.rows(); i++) {
-    if (E(i, 0) == a && E(i, 1) == b)
-      e = i;
-    if (E(i, 0) == b && E(i, 1) == a)
-      e = i;
+  // Replace all occurrences of b with a.
+  for (int face_index : vertex_to_faces[b]) {
+    for (int i = 0; i < F.cols(); i++) {
+      if (F(face_index, i) == b) {
+        F(face_index, i) = a;
+        found_b = true;
+      }
+    }
   }
 
-  // Edge was deleted in a previous collapse.
-  if (e == -1)
+  // No vertex b's were found, vertex was already removed.
+  if (!found_b)
     return false;
 
-  return igl::collapse_edge(e, V.row(a), V, F, E, EMAP, EF, EI);
+  int number_triangles_collapsed = 0;
+
+  // Now, the two triangles straddling the edge a-b will have [a, a, x].
+  for (int face_index : vertex_to_faces[b]) {
+    int number_a = 0;
+
+    for (int i = 0; i < F.cols(); i++) {
+      if (F(face_index, i) == a)
+        number_a++;
+    }
+
+    // Set straddle triangles to [-1, -1, -1].
+    if (number_a == 2) {
+      number_triangles_collapsed++;
+
+      for (int i = 0; i < F.cols(); i++)
+        F(face_index, i) = -1;
+    }
+  }
+
+  return (number_triangles_collapsed == 2);
 }
 
 // A collapsed face is [0, 0, 0].
 bool isDeadFace(const Eigen::RowVectorXi &face) {
   for (int i = 0; i < 3; i++) {
-    if (face(i) != 0)
+    if (face(i) != -1)
       return false;
   }
   return true;
@@ -142,44 +160,47 @@ void cleanupDeadFaces(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old
 }
 
 // Remove N1 neighbors of contour vertices.
-void removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
-                const Eigen::VectorXi &O_old,
-                Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
-                Eigen::VectorXi &O_new) {
+int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
+               const Eigen::VectorXi &O_old,
+               Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
+               Eigen::VectorXi &O_new) {
   // Initialze new points.
   Eigen::MatrixXd V_tmp = V_old;
   Eigen::MatrixXi F_tmp = F_old;
   Eigen::VectorXi O_tmp = O_old;
 
-  vector<pair<int, int> > to_remove = getEdgesToRemove(F_old, O_old);
-  set<int> have_removed;
+  vector<vector<int> > graph;
+  igl::adjacency_list(F_old, graph);
+
+  // List of (keep, remove) pairs of vertices.
+  vector<pair<int, int> > to_remove = getEdgesToRemove(V_old, graph, O_old);
+
+  // Mapping of vertex index to list of face indices it occurs in.
+  vector<vector<int> > vertex_to_faces(V_old.rows());
+  for (int i = 0; i < F_old.rows(); i++) {
+    for (int j = 0; j < F_old.cols(); j++)
+      vertex_to_faces[F_old(i, j)].push_back(i);
+  }
 
   // Decimate the edges.
+  set<int> have_removed;
   for (auto a_b : to_remove) {
     // Want to get rid of vertex b.
     int a = a_b.first;
     int b = a_b.second;
 
-    // Merge the vertices onto a.
-    V_tmp.row(b) = V_tmp.row(a);
-    O_tmp(b) = O_tmp(a);
-
     // Have already removed b.
-    if (b > a && have_removed.find(b) != have_removed.end())
-      continue;
-    if (a > b && have_removed.find(a) != have_removed.end())
+    if (have_removed.find(b) != have_removed.end())
       continue;
 
-    // Collapsed faces will be [0, 0, 0].
-    if (removeEdge(V_tmp, F_tmp, a, b)) {
-      if (b > a)
-        have_removed.insert(b);
-      if (a > b)
-        have_removed.insert(a);
-    }
+    // Collapsed faces will be [-1, -1, -1].
+    if (removeEdge(a, b, F_tmp, vertex_to_faces))
+      have_removed.insert(b);
   }
 
   cleanupDeadFaces(V_tmp, F_tmp, O_tmp, V_new, F_new, O_new);
+
+  return (V_old.rows() - V_new.rows());
 }
   
 } // end namespace for helper methods.
@@ -461,20 +482,28 @@ void marchingOffsetSurface(
 
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5);
 
+  Eigen::MatrixXd V_old = Voff;
+  Eigen::MatrixXi F_old = Foff;
+  Eigen::VectorXi O_old = Ooff;
   Eigen::MatrixXd V_new;
   Eigen::MatrixXi F_new;
   Eigen::VectorXi O_new;
 
-  removeRing(Voff, Foff, Ooff, V_new, F_new, O_new);
+  while (removeRing(V_old, F_old, O_old, V_new, F_new, O_new) > 0) {
+    V_old = V_new;
+    F_old = F_new;
+    O_old = O_new;
+  }
 
   // Debug.
   cout << (Voff.rows() - V_new.rows()) << " vertices removed." << endl;
   cout << (Foff.rows() - F_new.rows()) << " faces removed." << endl;
 
-  cout << "old" << endl;
+  Voff = V_new;
+  Foff = F_new;
+  Ooff = O_new;
+
   Helpers::viewTriMesh(Voff, Foff, Ooff);
-  cout << "new" << endl;
-  Helpers::viewTriMesh(V_new, F_new, O_new);
 }
 
 } // namespace OffsetSurface
