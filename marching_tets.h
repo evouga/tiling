@@ -5,10 +5,14 @@
 // This Source Code Form is subject to the terms of the Mozilla Public License
 // v. 2.0. If a copy of the MPL was not distributed with this file, You can
 // obtain one at http://mozilla.org/MPL/2.0/.
+#ifndef MARCHING_TETS_H
+#define MARCHING_TETS_H
+
+#include <Eigen/Core>
 
 // Will perform marching tets on a tet-mesh, and return the offset surface
 // at a given amount, delta.
-// 
+//
 // Inputs:
 //   V: #V by 3 list of vertices
 //   T: #T by 4 list of tet indices into V
@@ -27,3 +31,5 @@ void marching_tets(
   Eigen::MatrixXd& NV,
   Eigen::MatrixXi& NF,
   Eigen::VectorXi& I);
+
+#endif

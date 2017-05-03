@@ -7,10 +7,13 @@
 
 namespace Helpers {
 
+bool is_edge_manifold(const Eigen::MatrixXi &F, Eigen::VectorXi &M);
+
 // For making the mesh manifold.
 void extractManifoldPatch(
     Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
-    int minFaces = 5); // must have more than one tet (4 faces)
+    int minFaces=5, // must have more than one tet (4 faces)
+    bool changeMarkers=true); 
 
 void removeDuplicates(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
 
@@ -39,6 +42,9 @@ void combineMesh(const std::vector<Eigen::MatrixXd> &Vs,
 void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
                   const Eigen::VectorXi &M1,
                   Eigen::MatrixXd &V2, Eigen::MatrixXi &F2, Eigen::VectorXi &M2);
+
+void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
+                            double eps=1e-6);
 
 } // namespace Helpers
 

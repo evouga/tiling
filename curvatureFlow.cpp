@@ -418,8 +418,6 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   // This energy include the caps.
   biharmonic(V_prepared, F_new, O_new, xy_nonfixed, L, V_new);
 
-  Helpers::viewTriMesh(V_new, F_new, O_new);
-
   // Decapitate the caps.
   return biharmonic_energy(V_new, F_new, new_vertices);
 }

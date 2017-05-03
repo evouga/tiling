@@ -109,7 +109,7 @@ bool removeEdge(int a, int b, Eigen::MatrixXi &F,
   return (number_triangles_collapsed == 2);
 }
 
-// A collapsed face is [0, 0, 0].
+// A collapsed face is [-1, -1, -1].
 bool isDeadFace(const Eigen::RowVectorXi &face) {
   for (int i = 0; i < 3; i++) {
     if (face(i) != -1)
@@ -118,7 +118,7 @@ bool isDeadFace(const Eigen::RowVectorXi &face) {
   return true;
 }
 
-// Removes all faces that are [0, 0, 0].
+// Removes all faces that are [-1, -1, -1].
 void cleanupDeadFaces(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
                       const Eigen::VectorXi &O_old,
                       Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
@@ -164,11 +164,6 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
                const Eigen::VectorXi &O_old,
                Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
                Eigen::VectorXi &O_new) {
-  // Initialze new points.
-  Eigen::MatrixXd V_tmp = V_old;
-  Eigen::MatrixXi F_tmp = F_old;
-  Eigen::VectorXi O_tmp = O_old;
-
   vector<vector<int> > graph;
   igl::adjacency_list(F_old, graph);
 
@@ -182,6 +177,8 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
       vertex_to_faces[F_old(i, j)].push_back(i);
   }
 
+  Eigen::MatrixXi F_with_dead_faces = F_old;
+
   // Decimate the edges.
   set<int> have_removed;
   for (auto a_b : to_remove) {
@@ -194,11 +191,12 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
       continue;
 
     // Collapsed faces will be [-1, -1, -1].
-    if (removeEdge(a, b, F_tmp, vertex_to_faces))
+    if (removeEdge(a, b, F_with_dead_faces, vertex_to_faces))
       have_removed.insert(b);
   }
 
-  cleanupDeadFaces(V_tmp, F_tmp, O_tmp, V_new, F_new, O_new);
+  cleanupDeadFaces(V_old, F_with_dead_faces, O_old,
+                   V_new, F_new, O_new);
 
   return (V_old.rows() - V_new.rows());
 }
@@ -495,14 +493,26 @@ void marchingOffsetSurface(
     O_old = O_new;
   }
 
+  ///////////////////////////////////////////////////////////////////
   // Debug.
   cout << (Voff.rows() - V_new.rows()) << " vertices removed." << endl;
   cout << (Foff.rows() - F_new.rows()) << " faces removed." << endl;
+  ///////////////////////////////////////////////////////////////////
 
   Voff = V_new;
   Foff = F_new;
   Ooff = O_new;
 
+  ///////////////////////////////////////////////////////////////////
+  // Debug.
+  Eigen::VectorXi tmp;
+  cout << "manifold before:" << Helpers::is_edge_manifold(Foff, tmp) << endl;
+  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, false);
+  cout << "manifold after:" << Helpers::is_edge_manifold(Foff, tmp) << endl;
+  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, false);
+  ///////////////////////////////////////////////////////////////////
+
+  Helpers::collapseSmallTriangles(Voff, Foff);
   Helpers::viewTriMesh(Voff, Foff, Ooff);
 }
 

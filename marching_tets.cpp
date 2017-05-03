@@ -6,6 +6,8 @@
 // v. 2.0. If a copy of the MPL was not distributed with this file, You can
 // obtain one at http://mozilla.org/MPL/2.0/.
 
+#include "marching_tets.h"
+
 #include <iostream>
 #include <map>
 #include <vector>
@@ -13,7 +15,6 @@
 #include <Eigen/Core>
 
 #include <igl/bfs_orient.h>
-#include <igl/collapse_small_triangles.h>
 #include <igl/remove_unreferenced.h>
 #include <igl/orientable_patches.h>
 #include <igl/orient_outward.h>

@@ -24,6 +24,7 @@
 #include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
 #include <igl/writeOFF.h>
+#include <igl/collapse_small_triangles.h>
 
 using namespace std;
 
@@ -73,7 +74,7 @@ bool is_edge_manifold(const Eigen::MatrixXi &F,
 // Each manifold patch must have at least minFaces faces or it will be
 // removed.
 void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
-                     Eigen::VectorXi &M, int minFaces) {
+                     Eigen::VectorXi &M, int minFaces, bool changeMarkers) {
   bool is_manifold = igl::is_edge_manifold(F);
   Eigen::VectorXi B;
   bool is_v_manifold = igl::is_vertex_manifold(F, B);
@@ -82,12 +83,13 @@ void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
     for (int i = 0; i < M.rows(); ++i) {
       if (!B(i)) {
         printf("Vertex %d has %d (was %d)\n", i, B(i), M(i));
-        M(i) = 100;
+        if (changeMarkers)
+          M(i) = 100;
       }
     }
   }
   if (!is_manifold) {
-    printf("Warning: Your mesh is not manifold!!\n");
+    printf("Warning: Your mesh is not edge manifold!!\n");
     Eigen::VectorXi NME;
     is_edge_manifold(F, NME);
     printf("Errors at: \n");
@@ -95,7 +97,8 @@ void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
       if (NME(i)) {
         printf("  row %d repeated %d\n", i, NME(i));
         for (int j = 0; j < F.cols(); ++j) {
-          M(F(i,j)) = 100;
+          if (changeMarkers)
+            M(F(i,j)) = 100;
           printf("   -> Setting %d to 100\n", F(i,j));
         }
       }
@@ -432,6 +435,15 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
 
   // Also make sure it's manifold.
   extractManifoldPatch(V2, F2, M2);
+}
+
+void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
+                            double eps) {
+  Eigen::MatrixXi F_tmp;
+  igl::collapse_small_triangles(V, F, eps, F_tmp);
+
+  cout << F.rows() - F_tmp.rows() << " faces removed." << endl;
+  F = F_tmp;
 }
 
 } // namespace Helpers
