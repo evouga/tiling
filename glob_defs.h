@@ -4,7 +4,7 @@
 // Put all the globally-used numbers in here.
 namespace GLOBAL {
   // Print/viewer debug mode.
-  const bool DEBUG = false;
+  const bool DEBUG = true;
 
   const float padding_perc = 0.05;
 

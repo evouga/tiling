@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <Eigen/Core>
+#include <Eigen/SparseCore>
 
 #include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/copyleft/cgal/remesh_self_intersections.h>
@@ -444,6 +445,97 @@ void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
 
   cout << F.rows() - F_tmp.rows() << " faces removed." << endl;
   F = F_tmp;
+}
+
+// Remove unused vertices.
+void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
+                        Eigen::VectorXi &O) {
+  int original_size = V.rows();
+
+  Eigen::MatrixXd V_new;
+  Eigen::MatrixXi F_new;
+  Eigen::VectorXi old_to_new;
+
+  igl::remove_unreferenced(V, F, V_new, F_new, old_to_new);
+
+  Eigen::VectorXi O_new(V_new.rows());
+
+  for (int old_index = 0; old_index < old_to_new.rows(); old_index++) {
+    int new_index = old_to_new(old_index);
+
+    // New index is -1 if it was removed..
+    if (new_index != -1)
+      O_new(new_index) = O(old_index);
+  }
+
+  if (GLOBAL::DEBUG)
+    cout << (V.rows() - V_new.rows()) << " unused vertices removed." << endl;
+
+  // Make it in place.
+  V = V_new;
+  F = F_new;
+  O = O_new;
+}
+
+bool isMeshOkay(const Eigen::MatrixXd &V, Eigen::MatrixXi &F, double eps) {
+  bool result = true;
+  double min_area = 1e10;
+
+  set<int> vertices;
+
+  for (int i = 0; i < F.rows(); i++) {
+    for (int j = 0; j < 3; j++) {
+      // Check if vertex indices are valid.
+      if (F(i, j) < 0 || F(i, j) >= V.rows()) {
+        cout << "Vertex index " << F(i, j) << " is out of bounds." << endl;
+        result = false;
+      }
+
+      vertices.insert(F(i, j));
+    }
+
+    // Check if faces have small areas.
+    Eigen::RowVector3d u = V.row(F(i, 1)) - V.row(F(i, 0));
+    Eigen::RowVector3d v = V.row(F(i, 2)) - V.row(F(i, 0));
+    double area = u.cross(v).norm();
+
+    if (area < eps) {
+      cout << "Face " << i << " has area " << area << endl;
+      result = false;
+    }
+
+    min_area = min(min_area, area);
+  }
+
+  int unused = 0;
+
+  // Check if all vertex indices are used.
+  for (int i = 0; i < V.rows(); i++) {
+    if (vertices.find(i) == vertices.end()) {
+      unused++;
+
+      cout << "Vertex " << i << " not used in faces." << endl;
+      result = false;
+    }
+  }
+
+  cout << "Minimum face area: " << min_area << endl;
+  cout << "Number unused vertices: " << unused << endl;
+
+  return result;
+}
+
+bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A) {
+  for (int k = 0; k < A.outerSize(); ++k) {
+    for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it) {
+      double x = it.value();
+
+      if (isnan(x))
+        return true;
+    }
+  }
+
+  return false;
 }
 
 } // namespace Helpers

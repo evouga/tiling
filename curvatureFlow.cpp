@@ -451,7 +451,7 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   Eigen::SparseMatrix<double> M;
   Eigen::SparseMatrix<double> Q;
 
-  for (int counter = 0; counter < 10; counter++) {
+  for (int counter = 0; counter < 5; counter++) {
     // The positions of these indices are held constant (keep the input values).
     Eigen::MatrixXd V_bc = igl::slice(V_new, b_xy, 1);
     Eigen::VectorXd V_x_fixed = V_bc.col(0);
@@ -470,6 +470,19 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
     // Get biharmonic (k=2) weights.
     igl::harmonic(L, M, 2, Q);
+
+    //////////////////////////////////////////////////////////////////////
+    // DEBUG
+    //////////////////////////////////////////////////////////////////////
+    if (Helpers::sparseMatrixHasNaN(M)) {
+      cout << "iteration: " << counter << endl;
+      cout << "M has nans." << endl;
+    }
+    if (Helpers::sparseMatrixHasNaN(Q)) {
+      cout << "iteration: " << counter << endl;
+      cout << "Q has nans." << endl;
+    }
+    //////////////////////////////////////////////////////////////////////
 
     // Solve for each of these.
     Eigen::VectorXd V_x_new, V_y_new, V_z_new;

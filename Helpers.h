@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/SparseCore>
 
 namespace Helpers {
 
@@ -44,7 +45,13 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
                   Eigen::MatrixXd &V2, Eigen::MatrixXi &F2, Eigen::VectorXi &M2);
 
 void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
-                            double eps=1e-6);
+                            double eps=1e-5);
+
+void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
+
+bool isMeshOkay(const Eigen::MatrixXd &V, Eigen::MatrixXi &F, double eps=1e-5);
+
+bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A);
 
 } // namespace Helpers
 

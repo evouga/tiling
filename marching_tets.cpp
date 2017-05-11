@@ -1008,7 +1008,7 @@ void marching_tets(
   Eigen::MatrixXd newV;
   Eigen::MatrixXi newF;
   Eigen::VectorXi SVJ, SVI, I2;
-  Helpers::viewTriMesh(NV, NF, facesMarkers);
+  // Helpers::viewTriMesh(NV, NF, facesMarkers);
   igl::writeOFF("offset_mesh.off", NV, NF);
 
   /*
@@ -1047,7 +1047,7 @@ void marching_tets(
 
   //Helpers::extractManifoldPatch(NV, NF, I);
 
-  Helpers::viewTriMesh(NV, NF, I);
+  // Helpers::viewTriMesh(NV, NF, I);
 
 
   // orient everything correctly.

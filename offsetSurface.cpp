@@ -513,7 +513,15 @@ void marchingOffsetSurface(
   ///////////////////////////////////////////////////////////////////
 
   Helpers::collapseSmallTriangles(Voff, Foff);
-  Helpers::viewTriMesh(Voff, Foff, Ooff);
+
+  cout << "debugging" << endl;
+  cout << "is okay: " << Helpers::isMeshOkay(Voff, Foff) << endl;
+
+  Helpers::removeUnreferenced(Voff, Foff, Ooff);
+
+  cout << "is okay: " << Helpers::isMeshOkay(Voff, Foff) << endl;
+
+  // Helpers::viewTriMesh(Voff, Foff, Ooff);
 }
 
 } // namespace OffsetSurface
