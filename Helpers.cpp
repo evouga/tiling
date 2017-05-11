@@ -244,6 +244,9 @@ namespace {
 void set_viewer(igl::viewer::Viewer &viewer,
                 const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                 const Eigen::VectorXi &M) {
+  if (!isMeshOkay(V, F))
+    cout << "Mesh has problems." << endl;
+
   // Add colors.
   Eigen::MatrixXd C;
   igl::jet(M, true, C);
@@ -291,7 +294,6 @@ void set_viewer_with_color(igl::viewer::Viewer &viewer,
 
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  const Eigen::VectorXi &O) {
-
   igl::viewer::Viewer viewer;
 
   Eigen::MatrixXd V_biharmonic = V;
@@ -330,6 +332,7 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
       printf("Finished biharmonic: %lf\n", energy);
       set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
+
       times_called++;
     }
     else if (key == 'R') {
@@ -477,7 +480,7 @@ void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
   O = O_new;
 }
 
-bool isMeshOkay(const Eigen::MatrixXd &V, Eigen::MatrixXi &F, double eps) {
+bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) {
   bool result = true;
   double min_area = 1e10;
 
@@ -515,6 +518,21 @@ bool isMeshOkay(const Eigen::MatrixXd &V, Eigen::MatrixXi &F, double eps) {
       unused++;
 
       cout << "Vertex " << i << " not used in faces." << endl;
+      result = false;
+    }
+  }
+
+  // Check for nans in vertex positions.
+  for (int i = 0; i < V.rows(); i++) {
+    bool has_nan = false;
+
+    for (int j = 0; j < 3; j++) {
+      if (isnan(V(i, j)))
+        has_nan = true;
+    }
+
+    if (has_nan) {
+      cout << "Vertex " << i << " has nans. " << V.row(i) << endl;
       result = false;
     }
   }

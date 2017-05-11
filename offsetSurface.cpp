@@ -493,35 +493,21 @@ void marchingOffsetSurface(
     O_old = O_new;
   }
 
-  ///////////////////////////////////////////////////////////////////
-  // Debug.
-  cout << (Voff.rows() - V_new.rows()) << " vertices removed." << endl;
-  cout << (Foff.rows() - F_new.rows()) << " faces removed." << endl;
-  ///////////////////////////////////////////////////////////////////
-
   Voff = V_new;
   Foff = F_new;
   Ooff = O_new;
 
-  ///////////////////////////////////////////////////////////////////
-  // Debug.
   Eigen::VectorXi tmp;
-  cout << "manifold before:" << Helpers::is_edge_manifold(Foff, tmp) << endl;
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, false);
-  cout << "manifold after:" << Helpers::is_edge_manifold(Foff, tmp) << endl;
-  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, false);
-  ///////////////////////////////////////////////////////////////////
-
   Helpers::collapseSmallTriangles(Voff, Foff);
-
-  cout << "debugging" << endl;
-  cout << "is okay: " << Helpers::isMeshOkay(Voff, Foff) << endl;
-
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
 
-  cout << "is okay: " << Helpers::isMeshOkay(Voff, Foff) << endl;
-
-  // Helpers::viewTriMesh(Voff, Foff, Ooff);
+  if (!Helpers::isMeshOkay(Voff, Foff)) {
+    cout << __LINE__ << endl;
+    Helpers::viewTriMesh(Voff, Foff, Ooff);
+    cout << "Marching offset surface mesh is ill-posed." << endl;
+    exit(1);
+  }
 }
 
 } // namespace OffsetSurface

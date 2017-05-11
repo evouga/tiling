@@ -371,6 +371,12 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
                       Eigen::VectorXi &O_new, vector<int> *new_vertices) {
+  if (!Helpers::isMeshOkay(V, F)) {
+    cout << __LINE__ << endl;
+    cout << "Mesh before biharmonic is ill-posed." << endl;
+    exit(1);
+  }
+
   // The updated markers only keep the boundary vertices.
   Eigen::VectorXi O_exterior = remove_interior(F, O);
 
@@ -388,6 +394,12 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  V_tmp, F_tmp, O_tmp, true);
   extendVertices(V_tmp, F_tmp, O_tmp,
                  V_prepared, F_new, O_new, false);
+
+  if (!Helpers::isMeshOkay(V_prepared, F_new)) {
+    cout << __LINE__ << endl;
+    cout << "Extended mesh is ill-posed." << endl;
+    exit(1);
+  }
 
   // Mark the ones that are out of the original scale (new vertices)
   Eigen::VectorXi xy_nonfixed = O_new;
@@ -417,6 +429,11 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
   // This energy include the caps.
   biharmonic(V_prepared, F_new, O_new, xy_nonfixed, L, V_new);
+
+  if (!Helpers::isMeshOkay(V_new, F_new)) {
+    cout << __LINE__ << endl;
+    cout << "Biharmonic mesh is not okay." << endl;
+  }
 
   // Decapitate the caps.
   return biharmonic_energy(V_new, F_new, new_vertices);
@@ -502,6 +519,9 @@ double biharmonic(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     V_new.col(1) = V_y_new;
     V_new.col(2) = V_z_new;
   }
+
+  // if (!Helpers::isMeshOkay(V_new, F))
+  //   Helpers::viewTriMesh(V_new, F, O);
 
   // Calculate the energy including the bubbles.
   return biharmonic_energy(V_new, F);
