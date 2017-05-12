@@ -261,7 +261,7 @@ int main(int argc, char *argv[]) {
     botM = topM;
 
     // For debugging.
-    if (level > start) {
+    if (level > start && (level - start) % 5 == 0) {
       int current_tile = 0;
 
       for (Tile *tile : generated[level]) {

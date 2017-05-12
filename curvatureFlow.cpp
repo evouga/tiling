@@ -340,6 +340,7 @@ bool igl_harmonic_single(const Eigen::SparseMatrix<double> &Q,
   return min_quad_with_fixed_solve(data, B, V, Eigen::VectorXd(), W);
 }
 
+// \int a^2 + b^2 dA.
 double biharmonic_energy(const Eigen::MatrixXd &V,
                          const Eigen::MatrixXi &F,
                          const vector<int> *to_ignore=NULL) {
@@ -362,7 +363,10 @@ double biharmonic_energy(const Eigen::MatrixXd &V,
   Eigen::SparseMatrix<double> Mi;
   igl::invert_diag(M, Mi);
 
-  return 0.25 * (V.transpose() * L.transpose() * Mi * L * V).trace();
+  // -L V = 2 H \hat n.
+  double mean_squared = 0.25 * (V.transpose() * L.transpose() * Mi * L * V).trace();
+
+  return 4.0 * mean_squared - 2.0 * geodesic;
 }
 
 } // namespace

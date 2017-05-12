@@ -50,7 +50,7 @@ void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
 void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
 
 bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                double eps=1e-8);
+                double eps=1e-11);
 
 bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A);
 
