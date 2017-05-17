@@ -527,7 +527,7 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) 
     bool has_nan = false;
 
     for (int j = 0; j < 3; j++) {
-      if (isnan(V(i, j)))
+      if (std::isnan(V(i, j)))
         has_nan = true;
     }
 
@@ -548,7 +548,7 @@ bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A) {
     for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it) {
       double x = it.value();
 
-      if (isnan(x))
+      if (std::isnan(x))
         return true;
     }
   }

@@ -1,23 +1,24 @@
 #include "offsetSurface.h"
 
-#include <vector>
 #include <map>
 #include <utility>
+#include <vector>
 
 #include <CGAL/Complex_2_in_triangulation_3.h>
 #include <CGAL/Implicit_surface_3.h>
 #include <CGAL/make_surface_mesh.h>
 #include <CGAL/Surface_mesh_default_triangulation_3.h>
 
+#include <igl/adjacency_list.h>
 #include <igl/boundary_facets.h>
+#include <igl/collapse_edge.h>
 #include <igl/copyleft/cgal/complex_to_mesh.h>
+#include <igl/edge_flaps.h>
 #include <igl/exterior_edges.h>
 #include <igl/in_element.h>
+#include <igl/remove_unreferenced.h>
 #include <igl/unique.h>
-#include <igl/collapse_edge.h>
 #include <igl/unique_edge_map.h>
-#include <igl/edge_flaps.h>
-#include <igl/adjacency_list.h>
 
 #include "glob_defs.h"
 #include "Helpers.h"
