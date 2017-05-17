@@ -1,0 +1,3 @@
+[submodule "lib/meshfix"]
+	path = lib/meshfix
+	url = https://github.com/alecjacobson/meshfix
