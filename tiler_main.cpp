@@ -156,6 +156,11 @@ map<set<int>, ConnectedComponent> getHeatFlowValidComponents(SliceStack &ss,
 }
 
 int main(int argc, char *argv[]) {
+  if (argc < 5) {
+    fprintf(stderr, "usage: <trace_path> <trace_name> <strat> <num_slices>\n");
+    return -1;
+  }
+
   const char* trace_path = argv[1];
   const char* trace_name = argv[2];
   const int start = atoi(argv[3]);
