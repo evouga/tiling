@@ -70,6 +70,19 @@ message("libIGL definitions: ${LIBIGL_DEFINITIONS}")
 include_directories(${LIBIGL_INCLUDE_DIRS})
 add_definitions(${LIBIGL_DEFINITIONS})
 
+######################################################################
+# Meshfix
+######################################################################
+set(JMESHEXT_DIR    "${PROJECT_SOURCE_DIR}/lib/meshfix/JMeshExt-1.0alpha_src")
+set(JMESH_DIR       "${JMESHEXT_DIR}/JMeshLib-1.2/")
+
+include_directories("${JMESHEXT_DIR}/include")
+include_directories("${JMESH_DIR}/include")
+include_directories("${PROJECT_SOURCE_DIR}/lib/meshfix")
+
+add_subdirectory("${PROJECT_SOURCE_DIR}/lib/meshfix" "meshfix")
+######################################################################
+
 ### Add your project files
 SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp;${CMAKE_CURRENT_LIST_DIR}/tiler_main.cpp;${CMAKE_CURRENT_LIST_DIR}/debug/debugger_main.cpp;${CMAKE_CURRENT_LIST_DIR}/icoso_tile.cpp")
 message("Removing binary files ${BINARY_FILES}")
@@ -79,18 +92,17 @@ message("Project sources are: ${SRCFILES}")
 add_executable(${PROJECT_NAME}_bin main.cpp ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(${PROJECT_NAME}_bin ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})
 
-add_executable(test_harmonic_bin test_harmonic.cpp 
-  curvatureFlow.cpp 
-  Helpers.cpp 
-  ${LIBIGL_EXTRA_SOURCES})
+add_executable(test_harmonic_bin test_harmonic.cpp curvatureFlow.cpp Helpers.cpp ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 add_executable(test_icoso_tile icoso_tile.cpp  ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_icoso_tile ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 # Dynamic programming for correct topologies.
-add_executable(tiler_main tiler_main.cpp Tiler.cpp ${SRCFILES})
-target_link_libraries(tiler_main ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+add_executable(tiler_main tiler_main.cpp ${SRCFILES})
+target_link_libraries(tiler_main
+                      meshfix jmesh jmeshext
+                      ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 # Debugging runner for tiler_main (enter in tile stacks and check if valid).
 # From the build directory -

@@ -1,8 +1,12 @@
+#define MESHFIX_WITH_EIGEN
+
 #include "Helpers.h"
 
 #include "curvatureFlow.h"
 #include "glob_defs.h"
 #include "marching_tets.h"
+
+#include "meshfix.h"
 
 #include <iostream>
 #include <cstdio>
@@ -356,6 +360,14 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                                                                     new_vertices);
 
       set_viewer_with_color(viewer, V_biharmonic, F_biharmonic, energy_density);
+    } else if (key == 'F') {
+      Eigen::MatrixXd W;
+      Eigen::MatrixXi G;
+
+      meshfix(V_biharmonic, F_biharmonic, W, G);
+
+      Eigen::VectorXi O_unused(W.rows());
+      set_viewer(viewer, W, G, O_unused);
     }
 
     return true;
