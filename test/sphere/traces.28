@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!DOCTYPE Section SYSTEM 'section.dtd'>
+<Section alignLocked="true" index="28" thickness="5">
+	<Transform dim="0"
+		xcoef=" 0 1 0 0 0 0"
+		ycoef=" 0 0 1 0 0 0">
+		<Contour border="0 1 0" closed="true" fill="0 1 0" hidden="false" mode="9"
+			name="d001"
+			points="1.5 1.6,
+				1.6 1.7,
+				1.5 1.8,
+				1.4 1.7"
+		simplified="true"/>
+	</Transform>
+</Section>

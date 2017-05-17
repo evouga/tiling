@@ -157,23 +157,27 @@ map<set<int>, ConnectedComponent> getHeatFlowValidComponents(SliceStack &ss,
 
 int main(int argc, char *argv[]) {
   if (argc < 5) {
-    fprintf(stderr, "usage: <trace_path> <trace_name> <strat> <num_slices>\n");
+    fprintf(stderr, "usage: <trace_path> <trace_name> <start> <num_slices>\n");
     return -1;
   }
 
   const char* trace_path = argv[1];
   const char* trace_name = argv[2];
-  const int start = atoi(argv[3]);
-  const int num_slices = atoi(argv[4]);
+  int start = atoi(argv[3]);
+  int num_slices = atoi(argv[4]);
 
   SliceStack ss(trace_path, trace_name);
 
   // The first tile layer of contours.
+  while(ss.getSizeAt(start) <= 0) start++;
+  printf("Using start of %d\n", start);
+
   generated[start-1].push_back(new Tile(ss.getContoursAt(start)));
 
   for (int level = start; level < start + num_slices; level++) {
-    if ((generated[level-1].size() == 0) || (ss.getSizeAt(level) <= 0))
+    if ((generated[level-1].size() == 0) || (ss.getSizeAt(level) <= 0)) {
       return -1;
+    }
 
     cout << "Level: " << level << endl;
     cout << "Contours: " << ss.getSizeAt(level) << endl;
