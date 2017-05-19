@@ -54,6 +54,11 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
 bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A);
 
+// Will write out the mesh with the given prefix specified by fn. Will write to
+// fn.off and fn_orig.txt. Use this with test_harmonic_bin.
+void writeMeshWithMarkers(const char* fn,
+                          const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, 
+                          const Eigen::VectorXi &M);
 } // namespace Helpers
 
 #endif // HELPERS_H

@@ -16,9 +16,11 @@
 #include <igl/edge_flaps.h>
 #include <igl/exterior_edges.h>
 #include <igl/in_element.h>
+#include <igl/jet.h>
 #include <igl/remove_unreferenced.h>
 #include <igl/unique.h>
 #include <igl/unique_edge_map.h>
+#include <igl/viewer/Viewer.h>
 
 #include "glob_defs.h"
 #include "Helpers.h"
@@ -30,6 +32,52 @@ using namespace std;
 
 // begin namespace for helper methods.
 namespace {
+
+bool should_collapse(int a, int b, double zmin, double zmax,
+                     const Eigen::MatrixXd &V,
+                     const Eigen::VectorXi &M) {
+  // If a is original and b is not and both are on the boundary, return true
+  if (M(a) != GLOBAL::nonoriginal_marker &&
+      M(b) == GLOBAL::nonoriginal_marker) {
+    return (std::fabs(V(a, 2) - zmin) < GLOBAL::EPS &&
+            std::fabs(V(b, 2) - zmin) < GLOBAL::EPS) ||
+           (std::fabs(V(a, 2) - zmax) < GLOBAL::EPS &&
+            std::fabs(V(b, 2) - zmax) < GLOBAL::EPS);
+  }
+  // Otherwise, return false.
+  return false;
+}
+vector<int> getEdgesToRemove(const Eigen::MatrixXd &V,
+                             const Eigen::MatrixXi &E,
+                             const Eigen::VectorXi &M) {
+  // The boundary vertices.
+  double z_min = 1e10;
+  double z_max = -1e10;
+
+  for (int i = 0; i < V.rows(); i++) {
+    z_min = min(z_min, V(i, 2));
+    z_max = max(z_max, V(i, 2));
+  }
+
+  vector<int> to_remove;
+  // Check all the edges for things we should collapse.
+  for (int i = 0; i < E.rows(); ++i) {
+    // Check for both directions.
+    if (should_collapse(E(i, 0), E(i, 1), z_min, z_max, V, M) ||
+        should_collapse(E(i, 1), E(i, 0), z_min, z_max, V, M)) {
+      if (E(i, 0) == E(i, 1)) {
+        printf("ERROR in computing!!!\n");
+      }
+      if (E(i, 0) == 21 || E(i, 0) == 19 || i == 100) {
+        printf("Here, we have %d: %d=%d and %d=%d\n", 
+               i, E(i, 0), M(E(i, 0)), E(i, 1), M(E(i, 1)));
+      }
+      to_remove.push_back(i);
+    }
+  }
+
+  return to_remove;
+}
 
 // Returns list of (a, b) pairs, where "a" is the vertex to keep.
 vector<pair<int, int> > getEdgesToRemove(const Eigen::MatrixXd &V,
@@ -165,11 +213,205 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
                const Eigen::VectorXi &O_old,
                Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
                Eigen::VectorXi &O_new) {
+  // Start of new code.
+  Eigen::MatrixXi E, EF,EI;
+  Eigen::VectorXi EMAP;
+  igl::edge_flaps(F_old, E,EMAP,EF,EI);
+
+  Eigen::MatrixXd V;
+  Eigen::MatrixXi F;
+  Eigen::VectorXi O;
+
+  V = V_old;
+  F = F_old;
+  O = O_old;
+  // The boundary vertices.
+  double z_min = 1e10;
+  double z_max = -1e10;
+
+  for (int i = 0; i < V.rows(); i++) {
+    z_min = min(z_min, V(i, 2));
+    z_max = max(z_max, V(i, 2));
+  }
+
+  std::set<int> collapsed;
+  /*
+  igl::viewer::Viewer viewer;
+  Eigen::MatrixXd Cols;
+  igl::jet(O, true, Cols);
+  viewer.data.set_mesh(V, F);
+  viewer.data.set_colors(Cols);
+  int i = 0;
+  viewer.callback_key_down = [&](igl::viewer::Viewer& vv,
+                                 unsigned char key, int modifier) {
+    if (key == ' ') {
+      int prev_idx_a = -1, prev_idx_b = -1;
+      int prev_val_a, prev_val_b;
+      int new_val;
+      for (;i < E.rows(); ++i) {
+        // Means it's already done.
+        if (E(i, 0) == E(i, 1)) {
+          //printf("Already done edge with %d=%d\n", E(e, 0), E(e, 1));
+          continue;
+        }
+        // Only use each vertex once.
+        if (collapsed.find(E(i, 0)) != collapsed.end() ||
+            collapsed.find(E(i, 1)) != collapsed.end())
+          continue;
+        // Ignore if it's not valid.
+        if (!should_collapse(E(i, 0), E(i, 1), z_min, z_max, V, O) &&
+            !should_collapse(E(i, 1), E(i, 0), z_min, z_max, V, O)) {
+          continue;
+        }
+
+        int e = i;
+        // Get the index of the original one.
+        int orig = E(e, 0), nonorig = E(e, 1);
+        if (O(orig) == GLOBAL::nonoriginal_marker) {
+          orig = E(e, 1);
+          nonorig = E(e, 0);
+        }
+        if (O(orig) == GLOBAL::nonoriginal_marker) {
+          printf("[%d] This is a super big error, with %d=%d, %d=%d\n", 
+                 e, orig,O(orig), nonorig,O(nonorig));
+        }
+        bool worked = igl::collapse_edge(e, V.row(orig), V,F,E, EMAP, EF,EI);
+        if (!worked) {
+          printf("Error: edge collapse didn't work for edge %d=%d,%d (orig:%d,%d)\n",
+                 e, E(e, 0), E(e, 1), orig, nonorig);
+          //O(orig) = e;
+          //O(nonorig) = e;
+          new_val = 10;
+        } else {
+          printf("       Edge collapse DID WORK!!! for edge %d=%d,%d (orig:%d,%d)\n",
+                 e, E(e, 0), E(e, 1), orig, nonorig);
+          new_val = 9;
+          // Also need to update the original value.
+          O(nonorig) = O(orig);
+          collapsed.insert(orig);
+          collapsed.insert(nonorig);
+        }
+        prev_idx_a = orig;
+        prev_idx_b = nonorig;
+        i++;
+        break;
+      }
+
+      if (prev_idx_a != -1) {
+        prev_val_a = O(prev_idx_a);
+        prev_val_b = O(prev_idx_b);
+        O(prev_idx_a) = new_val;
+        O(prev_idx_b) = new_val;
+        igl::jet(O, true, Cols);
+        vv.data.clear();
+        vv.data.set_mesh(V, F);
+        vv.data.set_colors(Cols);
+        O(prev_idx_a) = prev_val_a;
+        O(prev_idx_b) = prev_val_b;
+        return true;
+      }
+      return false;
+    }
+  };
+  viewer.launch();
+  */
+
+  // Get edges to remove.
+  //vector<int> remove = getEdgesToRemove(V, E, O);
+  int num_removed = 0;
+  //for (int e : remove) {
+  for (int i = 0; i < E.rows(); ++i) {
+    printf("i is %d/%d (%d,%d)\n", i, E.rows(), EF(i, 0), EF(i, 1));
+    // Means it's already done.
+    if (E(i, 0) == E(i, 1)) {
+      //printf("Already done edge with %d=%d\n", E(e, 0), E(e, 1));
+      continue;
+    }
+    // Only use each vertex once.
+    if (collapsed.find(E(i, 0)) != collapsed.end() ||
+        collapsed.find(E(i, 1)) != collapsed.end())
+      continue;
+
+    // Face check, already collapsed some face.
+    if (F(EF(i, 0), 0) == IGL_COLLAPSE_EDGE_NULL ||
+        F(EF(i, 1), 0) == IGL_COLLAPSE_EDGE_NULL)
+      continue;
+
+    // Ignore if it's not valid.
+    if (!should_collapse(E(i, 0), E(i, 1), z_min, z_max, V, O) &&
+        !should_collapse(E(i, 1), E(i, 0), z_min, z_max, V, O)) {
+      continue;
+    }
+
+    int e = i;
+    printf("e is %d and i is %d\n", e, i);
+
+    // Get the index of the original one.
+    int orig = E(e, 0), nonorig = E(e, 1);
+    if (O(orig) == GLOBAL::nonoriginal_marker) {
+      orig = E(e, 1);
+      nonorig = E(e, 0);
+    }
+    if (O(orig) == GLOBAL::nonoriginal_marker) {
+      printf("[%d] This is a super big error, with %d=%d, %d=%d\n", 
+             e, orig,O(orig), nonorig,O(nonorig));
+    }
+    printf("collapsing %d to (%lf,%lf,%lf)... (%d,%d,%d) (%d,%d,%d)\n", e, 
+           V(orig, 0), V(orig, 1), V(orig, 2),
+           F(EF(e, 0), 0), F(EF(e, 0), 1), F(EF(e, 0), 2),
+           F(EF(e, 1), 0), F(EF(e, 1), 1), F(EF(e, 1), 2));
+    fflush(stdout);
+    bool worked = igl::collapse_edge(e, V.row(orig), V,F,E, EMAP, EF,EI);
+    printf("done!\n");
+    fflush(stdout);
+    if (!worked) {
+      printf("Error: edge collapse didn't work for edge %d=%d,%d (orig:%d,%d)\n",
+             e, E(e, 0), E(e, 1), orig, nonorig);
+      //O(orig) = e;
+      //O(nonorig) = e;
+    } else {
+      printf("       Edge collapse DID WORK!!! for edge %d=%d,%d (orig:%d,%d)\n",
+             e, E(e, 0), E(e, 1), orig, nonorig);
+      num_removed++;
+      // Also need to update the original value.
+      O(nonorig) = O(orig);
+      collapsed.insert(orig);
+      collapsed.insert(nonorig);
+    }
+  }
+  printf("Finished collapsing everything...\n");
+
+  // Get valid faces.
+  vector<int> valid_f;
+  for (int i = 0; i < F.rows(); ++i) {
+    bool valid = true;
+    for (int j = 0; j < F.cols(); ++j) {
+      if (F(i, j) == IGL_COLLAPSE_EDGE_NULL) {
+        valid = false;
+        break;
+      }
+    }
+    if (valid) {
+      valid_f.push_back(i);
+    }
+  }
+  
+  F_new.resize(valid_f.size(), 3);
+  for (int i = 0; i < valid_f.size(); ++i) {
+    F_new.row(i) = F.row(valid_f[i]);
+  }
+  V_new = V;
+  O_new = O;
+    
+  return num_removed;
+  // End of new code.
+
   vector<vector<int> > graph;
   igl::adjacency_list(F_old, graph);
 
   // List of (keep, remove) pairs of vertices.
   vector<pair<int, int> > to_remove = getEdgesToRemove(V_old, graph, O_old);
+
 
   // Mapping of vertex index to list of face indices it occurs in.
   vector<vector<int> > vertex_to_faces(V_old.rows());
@@ -192,8 +434,10 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
       continue;
 
     // Collapsed faces will be [-1, -1, -1].
-    if (removeEdge(a, b, F_with_dead_faces, vertex_to_faces))
+    if (removeEdge(a, b, F_with_dead_faces, vertex_to_faces)) {
+      //printf("Collapsed edge %d-%d\n", b, a);
       have_removed.insert(b);
+    }
   }
 
   cleanupDeadFaces(V_old, F_with_dead_faces, O_old,
@@ -480,6 +724,7 @@ void marchingOffsetSurface(
   }
 
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5);
+  Helpers::writeMeshWithMarkers("mesh_post_mtets", Voff, Foff, Ooff);
 
   Eigen::MatrixXd V_old = Voff;
   Eigen::MatrixXi F_old = Foff;
@@ -488,20 +733,31 @@ void marchingOffsetSurface(
   Eigen::MatrixXi F_new;
   Eigen::VectorXi O_new;
 
-  while (removeRing(V_old, F_old, O_old, V_new, F_new, O_new) > 0) {
+  int nrem;
+  int numcalls = 0;
+  while ((nrem = removeRing(V_old, F_old, O_old, V_new, F_new, O_new)) > 0) {
+    numcalls++;
+    printf("Removed %d\n", nrem);
+    Helpers::collapseSmallTriangles(V_new, F_new);
+    Helpers::removeUnreferenced(V_new, F_new, O_new);
+    Helpers::viewTriMesh(V_new, F_new, O_new);
     V_old = V_new;
     F_old = F_new;
     O_old = O_new;
   }
 
+  printf("Number of times removeRing called: %d\n", numcalls);
   Voff = V_new;
   Foff = F_new;
   Ooff = O_new;
+  Helpers::removeUnreferenced(Voff, Foff, Ooff);
+  //Helpers::viewTriMesh(Voff, Foff, Ooff);
 
   Eigen::VectorXi tmp;
-  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, false);
-  Helpers::collapseSmallTriangles(Voff, Foff);
+  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
+  //Helpers::collapseSmallTriangles(Voff, Foff);
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
+  Helpers::writeMeshWithMarkers("mesh_post_rring", Voff, Foff, Ooff);
 
   if (!Helpers::isMeshOkay(Voff, Foff)) {
     cout << __LINE__ << endl;

@@ -6,7 +6,7 @@
 #include "glob_defs.h"
 #include "marching_tets.h"
 
-#include "meshfix.h"
+//#include "meshfix.h"
 
 #include <iostream>
 #include <cstdio>
@@ -360,14 +360,15 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                                                                     new_vertices);
 
       set_viewer_with_color(viewer, V_biharmonic, F_biharmonic, energy_density);
-    } else if (key == 'F') {
+    /*} else if (key == 'F') {
       Eigen::MatrixXd W;
       Eigen::MatrixXi G;
 
-      meshfix(V_biharmonic, F_biharmonic, W, G);
+      //meshfix(V_biharmonic, F_biharmonic, W, G);
 
       Eigen::VectorXi O_unused(W.rows());
       set_viewer(viewer, W, G, O_unused);
+      */
     }
 
     return true;
@@ -515,7 +516,8 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) 
     double area = u.cross(v).norm();
 
     if (area < eps) {
-      cout << "Face " << i << " has area " << area << endl;
+      cout << "Face " << i << " has area " << area << "("
+           << F(i, 0) << ", " << F(i, 1) << ", " << F(i, 2) << ")\n";
       result = false;
     }
 
@@ -566,6 +568,21 @@ bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A) {
   }
 
   return false;
+}
+
+void writeMeshWithMarkers(const char* fn,
+                          const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                          const Eigen::VectorXi &M) {
+  char* fn_off = new char[strlen(fn) + 15];
+  sprintf(fn_off, "%s.off", fn);
+  igl::writeOFF(fn_off, V, F);
+  sprintf(fn_off, "%s_orig.txt", fn);
+  FILE* of = fopen(fn_off, "w");
+  for (int i = 0; i < M.rows(); ++i)
+    fprintf(of, "%d\n", M(i));
+  fclose(of);
+
+  delete[] fn_off;
 }
 
 } // namespace Helpers
