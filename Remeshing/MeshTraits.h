@@ -33,7 +33,7 @@ struct MeshTraits : public OpenMesh::DefaultTraits{
       int originalIndex;
 		
 		public:
-			VertexT():selected(false),doubleValue(0.0){}
+			VertexT():selected(false),doubleValue(0.0),originalIndex(-1){}
 		
 			const bool& isSelected() const{return selected;}
 			void setSelected(const bool _selected) {selected = _selected;}

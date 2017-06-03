@@ -47,6 +47,47 @@ bool should_collapse(int a, int b, double zmin, double zmax,
   // Otherwise, return false.
   return false;
 }
+
+bool should_collapse_type(int a, int b, double zmin, double zmax,
+                          const Eigen::MatrixXd &V,
+                          const Eigen::VectorXi &M,
+                          const Eigen::VectorXi &VValence,
+                          int type) {
+  if (!should_collapse(a,b, zmin,zmax, V,M)) return false;
+
+  // Know that one of them must be nonoriginal
+  if (type == 1) {
+    if (M(a) != GLOBAL::nonoriginal_marker) {
+      return VValence(a) == 3;
+    }
+    return VValence(b) == 3;
+  } 
+  // Type 2 is return true if outer ring has valence 3.
+  if (type == 2) {
+    if (M(a) == GLOBAL::nonoriginal_marker) {
+      return VValence(a) == 3;
+    }
+    return VValence(b) == 3;
+  }
+  // Type 0 is all others.
+  return true;
+}
+
+void getVertexValence(const Eigen::MatrixXd &V,
+                      const Eigen::MatrixXi &F,
+                      Eigen::VectorXi &VValence) {
+  VValence.resize(V.rows());
+  VValence.setZero();
+  for (int i = 0; i < F.rows(); ++i) {
+    for (int j = 0; j < F.cols(); ++j) {
+      // Ignore faces that have already been collapsed.
+      if (F(i, j) == IGL_COLLAPSE_EDGE_NULL) break;
+
+      VValence(F(i, j))++;
+    }
+  }
+}
+
 vector<int> getEdgesToRemove(const Eigen::MatrixXd &V,
                              const Eigen::MatrixXi &E,
                              const Eigen::VectorXi &M) {
@@ -209,14 +250,23 @@ void cleanupDeadFaces(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old
 }
 
 // Remove N1 neighbors of contour vertices.
+//
+// type is one of:
+//   0: collapse any edge
+//   1: collapse ring vertices with valence three
+//   2: collapse outer vertices with valence three
 int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
                const Eigen::VectorXi &O_old,
                Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
-               Eigen::VectorXi &O_new) {
+               Eigen::VectorXi &O_new, int type) {
   // Start of new code.
   Eigen::MatrixXi E, EF,EI;
   Eigen::VectorXi EMAP;
   igl::edge_flaps(F_old, E,EMAP,EF,EI);
+
+  // Also get vertex valences
+  Eigen::VectorXi VValence;
+  getVertexValence(V_old, F_old, VValence);
 
   Eigen::MatrixXd V;
   Eigen::MatrixXi F;
@@ -234,6 +284,7 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
     z_max = max(z_max, V(i, 2));
   }
 
+  int num_removed = 0;
   std::set<int> collapsed;
   /*
   igl::viewer::Viewer viewer;
@@ -245,6 +296,10 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
   viewer.callback_key_down = [&](igl::viewer::Viewer& vv,
                                  unsigned char key, int modifier) {
     if (key == ' ') {
+      if (i >= E.rows()) {
+        printf("Can't proceed, try quitting.\n");
+        return false;
+      }
       int prev_idx_a = -1, prev_idx_b = -1;
       int prev_val_a, prev_val_b;
       int new_val;
@@ -257,7 +312,7 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
         // Only use each vertex once.
         if (collapsed.find(E(i, 0)) != collapsed.end() ||
             collapsed.find(E(i, 1)) != collapsed.end())
-          continue;
+          ;//continue;
         // Ignore if it's not valid.
         if (!should_collapse(E(i, 0), E(i, 1), z_min, z_max, V, O) &&
             !should_collapse(E(i, 1), E(i, 0), z_min, z_max, V, O)) {
@@ -290,6 +345,7 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
           O(nonorig) = O(orig);
           collapsed.insert(orig);
           collapsed.insert(nonorig);
+          num_removed++;
         }
         prev_idx_a = orig;
         prev_idx_b = nonorig;
@@ -318,7 +374,6 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
 
   // Get edges to remove.
   //vector<int> remove = getEdgesToRemove(V, E, O);
-  int num_removed = 0;
   //for (int e : remove) {
   for (int i = 0; i < E.rows(); ++i) {
     printf("i is %d/%d (%d,%d)\n", i, E.rows(), EF(i, 0), EF(i, 1));
@@ -332,19 +387,35 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
         collapsed.find(E(i, 1)) != collapsed.end())
       continue;
 
+    if (EF(i, 0) < 0 || EF(i, 1) < 0) {
+      continue;
+    }
     // Face check, already collapsed some face.
     if (F(EF(i, 0), 0) == IGL_COLLAPSE_EDGE_NULL ||
-        F(EF(i, 1), 0) == IGL_COLLAPSE_EDGE_NULL)
+        F(EF(i, 1), 0) == IGL_COLLAPSE_EDGE_NULL) {
+      printf("Found bad face!!!\n");
       continue;
+    }
 
     // Ignore if it's not valid.
-    if (!should_collapse(E(i, 0), E(i, 1), z_min, z_max, V, O) &&
-        !should_collapse(E(i, 1), E(i, 0), z_min, z_max, V, O)) {
+    if (!should_collapse_type(E(i, 0), E(i, 1), z_min, z_max, V, O, VValence, type) &&
+        !should_collapse_type(E(i, 1), E(i, 0), z_min, z_max, V, O, VValence, type)) {
       continue;
     }
 
     int e = i;
-    printf("e is %d and i is %d\n", e, i);
+    printf("e is %d(%d,%d)\n", e, E(e, 0), E(e, 1));
+    if (e == 107) {
+      igl::viewer::Viewer viewer;
+      Eigen::VectorXi Ot = O;
+      Ot(E(e, 0)) = 10;
+      Ot(E(e, 1)) = 10;
+      Eigen::MatrixXd Cols;
+      igl::jet(Ot, true, Cols);
+      viewer.data.set_mesh(V, F);
+      viewer.data.set_colors(Cols);
+      viewer.launch();
+    }
 
     // Get the index of the original one.
     int orig = E(e, 0), nonorig = E(e, 1);
@@ -384,15 +455,17 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
   // Get valid faces.
   vector<int> valid_f;
   for (int i = 0; i < F.rows(); ++i) {
-    bool valid = true;
+    int valid = 0;
     for (int j = 0; j < F.cols(); ++j) {
+      valid++;
       if (F(i, j) == IGL_COLLAPSE_EDGE_NULL) {
-        valid = false;
-        break;
+        valid--;
       }
     }
-    if (valid) {
+    if (valid == 3) {
       valid_f.push_back(i);
+    } else if (valid > 0) {
+      printf("Found a face with %d valid vertices?\n", valid);
     }
   }
   
@@ -404,7 +477,12 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
   O_new = O;
     
   return num_removed;
+  //
   // End of new code.
+  //
+  //
+  //
+  //
 
   vector<vector<int> > graph;
   igl::adjacency_list(F_old, graph);
@@ -703,6 +781,37 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
   Foff = Fu;
 }
 
+// Will push the nonoriginal vertices on the boundary up or down.
+void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M) {
+  // The boundary vertices.
+  double zmin = 1e10;
+  double zmax = -1e10;
+  for (int i = 0; i < V.rows(); i++) {
+    zmin = min(zmin, V(i, 2));
+    zmax = max(zmax, V(i, 2));
+  }
+
+  // Adjust everything up or down.
+  for (int i = 0; i < F.rows(); ++i) {
+    for (int j = 0; j < F.cols(); ++j) {
+      // If it's not on the boundary, don't care.
+      if (V(F(i, j), 2) != zmin && V(F(i, j), 2) != zmax) continue;
+      // Don't touch things that are original.
+      if (M(F(i, j)) != GLOBAL::nonoriginal_marker) continue;
+      // Move everything up by epsilon.
+      if (V(F(i, j), 2) == zmin) {
+        V(F(i, j), 2) += 2 * GLOBAL::EPS;
+        M(F(i, j)) = 10;
+      } else {
+        V(F(i, j), 2) -= 2 * GLOBAL::EPS;
+        M(F(i, j)) = 9;
+      }
+
+    }
+
+  }
+}
+
 void marchingOffsetSurface(
     const Eigen::MatrixXd &V,
     const Eigen::MatrixXi &TT,
@@ -723,6 +832,12 @@ void marchingOffsetSurface(
     }
   }
 
+  // Dirty, dirty hack.
+  Eigen::VectorXi O_new = Ooff;
+  quickHack(Voff, Foff, O_new);
+  //Helpers::viewTriMesh(Voff, Foff, O_new);
+  //Helpers::viewTriMesh(Voff, Foff, Ooff);
+  /*
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5);
   Helpers::writeMeshWithMarkers("mesh_post_mtets", Voff, Foff, Ooff);
 
@@ -735,9 +850,32 @@ void marchingOffsetSurface(
 
   int nrem;
   int numcalls = 0;
-  while ((nrem = removeRing(V_old, F_old, O_old, V_new, F_new, O_new)) > 0) {
+  // First, remove all inner-ring vertices with valence 3:
+  while ((nrem = removeRing(V_old, F_old, O_old, V_new, F_new, O_new, 1)) > 0) {
     numcalls++;
-    printf("Removed %d\n", nrem);
+    printf("type 1 Removed %d\n", nrem);
+    Helpers::collapseSmallTriangles(V_new, F_new);
+    Helpers::removeUnreferenced(V_new, F_new, O_new);
+    Helpers::viewTriMesh(V_new, F_new, O_new);
+    V_old = V_new;
+    F_old = F_new;
+    O_old = O_new;
+  }
+  // Then, remove all outer-ring vertices with valence 3:
+  while ((nrem = removeRing(V_old, F_old, O_old, V_new, F_new, O_new, 2)) > 0) {
+    numcalls++;
+    printf("type 2 Removed %d\n", nrem);
+    Helpers::collapseSmallTriangles(V_new, F_new);
+    Helpers::removeUnreferenced(V_new, F_new, O_new);
+    Helpers::viewTriMesh(V_new, F_new, O_new);
+    V_old = V_new;
+    F_old = F_new;
+    O_old = O_new;
+  }
+  // Then, remove everything else.
+  while ((nrem = removeRing(V_old, F_old, O_old, V_new, F_new, O_new, 0)) > 0) {
+    numcalls++;
+    printf("type 0 Removed %d\n", nrem);
     Helpers::collapseSmallTriangles(V_new, F_new);
     Helpers::removeUnreferenced(V_new, F_new, O_new);
     Helpers::viewTriMesh(V_new, F_new, O_new);
@@ -750,12 +888,13 @@ void marchingOffsetSurface(
   Voff = V_new;
   Foff = F_new;
   Ooff = O_new;
+  */
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
   //Helpers::viewTriMesh(Voff, Foff, Ooff);
 
   Eigen::VectorXi tmp;
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
-  //Helpers::collapseSmallTriangles(Voff, Foff);
+  Helpers::collapseSmallTriangles(Voff, Foff);
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
   Helpers::writeMeshWithMarkers("mesh_post_rring", Voff, Foff, Ooff);
 
