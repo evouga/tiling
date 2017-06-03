@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.11)
 project(Tiling)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -58,7 +58,6 @@ endif()
 #message(FATAL_ERROR "${PROJECT_SOURCE_DIR}/../libigl/cmake")
 set(LIBIGL_CMAKE "${LIBIGL_INCLUDE_DIR}/../shared/cmake" CACHE PATH "Path for libigl cmake folder")
 add_subdirectory("${LIBIGL_CMAKE}" "libigl")
-
 ### ligIGL information ###
 message("libIGL includes: ${LIBIGL_INCLUDE_DIRS}")
 message("libIGL libraries: ${LIBIGL_LIBRARIES}")
@@ -66,31 +65,45 @@ message("libIGL extra sources: ${LIBIGL_EXTRA_SOURCES}")
 message("libIGL extra libraries: ${LIBIGL_EXTRA_LIBRARIES}")
 message("libIGL definitions: ${LIBIGL_DEFINITIONS}")
 
-### Prepare the build environment
-include_directories(${LIBIGL_INCLUDE_DIRS})
-add_definitions(${LIBIGL_DEFINITIONS})
 
 ######################################################################
 # Meshfix
 ######################################################################
-set(JMESHEXT_DIR    "${PROJECT_SOURCE_DIR}/lib/meshfix/JMeshExt-1.0alpha_src")
-set(JMESH_DIR       "${JMESHEXT_DIR}/JMeshLib-1.2/")
-
-include_directories("${JMESHEXT_DIR}/include")
-include_directories("${JMESH_DIR}/include")
-include_directories("${PROJECT_SOURCE_DIR}/lib/meshfix")
-
-add_subdirectory("${PROJECT_SOURCE_DIR}/lib/meshfix" "meshfix")
+find_package(meshfix REQUIRED)
+if (NOT MESHFIX_FOUND)
+   message("meshfix not found --- You can download it using: \n git clone --recursive https://github.com/alecjacobson/meshfix ${PROJECT_SOURCE_DIR}/lib/meshfix")
+endif()
+### meshfix information ###
+message("meshfix includes: ${MESHFIX_INCLUDE_DIRS}")
+message("meshfix libraries: ${MESHFIX_LIBRARIES}")
 ######################################################################
 
+######################################################################
+# Remeshing
+######################################################################
+add_subdirectory(Remeshing)
+######################################################################
+
+######################################################################
+### Prepare the build environment
+include_directories(${LIBIGL_INCLUDE_DIRS})
+include_directories(${MESHFIX_INCLUDE_DIRS})
+add_definitions(${LIBIGL_DEFINITIONS})
+
 ### Add your project files
-SET(BINARY_FILES "${CMAKE_CURRENT_LIST_DIR}/main.cpp;${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp;${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp;${CMAKE_CURRENT_LIST_DIR}/tiler_main.cpp;${CMAKE_CURRENT_LIST_DIR}/debug/debugger_main.cpp;${CMAKE_CURRENT_LIST_DIR}/icoso_tile.cpp")
+SET(BINARY_FILES ${CMAKE_CURRENT_LIST_DIR}/main.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/test_harmonic.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/contourtree.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/tiler_main.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/debug/debugger_main.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/icoso_tile.cpp)
 message("Removing binary files ${BINARY_FILES}")
 FILE(GLOB SRCFILES *.cpp)
 LIST(REMOVE_ITEM SRCFILES ${BINARY_FILES})
 message("Project sources are: ${SRCFILES}")
+
 add_executable(${PROJECT_NAME}_bin main.cpp ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
-target_link_libraries(${PROJECT_NAME}_bin ${LIBTOURTRE_LIB} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES} ${LIBTOURTRE_LIB})
+target_link_libraries(${PROJECT_NAME}_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 add_executable(test_harmonic_bin test_harmonic.cpp curvatureFlow.cpp Helpers.cpp ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
@@ -101,8 +114,8 @@ target_link_libraries(test_icoso_tile ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARI
 # Dynamic programming for correct topologies.
 add_executable(tiler_main tiler_main.cpp ${SRCFILES})
 target_link_libraries(tiler_main
-                      meshfix jmesh jmeshext
-                      ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+  ${MESHFIX_LIBRARIES} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES}
+  Remeshing)
 
 # Debugging runner for tiler_main (enter in tile stacks and check if valid).
 # From the build directory -

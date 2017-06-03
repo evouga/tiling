@@ -70,6 +70,11 @@ void combineComponentsIntoMesh(const vector<Component*> &components,
   vector<Eigen::VectorXi> tileMs;
 
   for (Component *component : components) {
+    Eigen::MatrixXd V1 = component->V;
+    Eigen::MatrixXi F1 = component->F;
+    Eigen::VectorXi O1 = component->M;
+    Helpers::extractManifoldPatch(V1, F1, O1);
+    //Helpers::viewTriMesh(V1, F1, O1);
     tileVs.push_back(component->V);
     tileFs.push_back(component->F);
     tileMs.push_back(component->M);
@@ -224,7 +229,7 @@ int main(int argc, char *argv[]) {
     // View all the tiles first.
     for (Tile *tile : current_level_tiles) {
       cout << "Energy: " << energy(tile) << endl;
-      viewTile(tile, 0);
+      //viewTile(tile, 0);
     }
 
     // Pick the best of each connectivity.
@@ -275,7 +280,9 @@ int main(int argc, char *argv[]) {
 
       for (Tile *tile : generated[level]) {
         printf(" -> Tile %d/%lu\n", ++current_tile, generated[level].size());
-        viewTile(tile);
+        if (current_tile > 35) {
+          viewTile(tile);
+        }
       }
     }
   }

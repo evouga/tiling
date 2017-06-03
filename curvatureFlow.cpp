@@ -400,9 +400,9 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  V_prepared, F_new, O_new, false);
 
   if (!Helpers::isMeshOkay(V_prepared, F_new)) {
-    cout << __LINE__ << endl;
-    cout << "Extended mesh is ill-posed." << endl;
-    exit(1);
+    cout << __FILE__ << ":" << __LINE__ << ": "
+         << "Extended mesh is ill-posed." << endl;
+    //exit(1);
   }
 
   // Mark the ones that are out of the original scale (new vertices)

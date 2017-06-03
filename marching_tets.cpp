@@ -15,6 +15,7 @@
 #include <Eigen/Core>
 
 #include <igl/bfs_orient.h>
+#include <igl/collapse_small_triangles.h>
 #include <igl/remove_unreferenced.h>
 #include <igl/orientable_patches.h>
 #include <igl/orient_outward.h>
@@ -1012,7 +1013,8 @@ void marching_tets(
   igl::writeOFF("offset_mesh.off", NV, NF);
 
   /*
-  igl::collapse_small_triangles(NV, NF, 1e-6, newF);
+  igl::collapse_small_triangles(NV, NF, 1e-8, newF);
+  printf("Collapsed %d small triangles\n", NF.rows() - newF.rows());
   NF = newF;
   */
 
