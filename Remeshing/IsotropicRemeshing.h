@@ -19,7 +19,8 @@ enum ISOTROPIC_REMESHING_TYPES {
   EQUALIZE_VALENCES = 0x0004,
   TANGENTIAL_RELAXATION = 0x0008,
   PROJECT_TO_SURFACE = 0x0010,
-  ALL = 0x001f
+  AREA_EQUALIZATION = 0x0020,
+  ALL = 0x003f
 };
 
 class IsotropicRemeshing
@@ -30,7 +31,7 @@ class IsotropicRemeshing
 	~IsotropicRemeshing();
 	
 	void remesh(TriangleMesh * _mesh,unsigned int _iterations, 
-              ISOTROPIC_REMESHING_TYPES types = ALL);
+              int types = ISOTROPIC_REMESHING_TYPES::ALL);
 	
 	protected:
 		

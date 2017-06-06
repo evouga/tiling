@@ -62,6 +62,7 @@ public:
                       const std::set<int> &allowed=std::set<int>());
 
   int getSizeAt(int i);
+  int getNumPtsAt(int i);
 
   std::set<int> getContoursAt(int i);
 

@@ -22,8 +22,9 @@
 #include <igl/unique_edge_map.h>
 #include <igl/viewer/Viewer.h>
 
-#include "glob_defs.h"
 #include "Helpers.h"
+#include "Remeshing/Remesh.h"
+#include "glob_defs.h"
 #include "marching_tets.h"
 
 #define OFFSET_DEBUG 0
@@ -782,7 +783,8 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
 }
 
 // Will push the nonoriginal vertices on the boundary up or down.
-void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M) {
+void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
+               double shift = 2 * GLOBAL::EPS) {
   // The boundary vertices.
   double zmin = 1e10;
   double zmax = -1e10;
@@ -800,10 +802,10 @@ void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M)
       if (M(F(i, j)) != GLOBAL::nonoriginal_marker) continue;
       // Move everything up by epsilon.
       if (V(F(i, j), 2) == zmin) {
-        V(F(i, j), 2) += 2 * GLOBAL::EPS;
+        V(F(i, j), 2) += shift;
         M(F(i, j)) = 10;
       } else {
-        V(F(i, j), 2) -= 2 * GLOBAL::EPS;
+        V(F(i, j), 2) -= shift;
         M(F(i, j)) = 9;
       }
 
@@ -832,11 +834,16 @@ void marchingOffsetSurface(
     }
   }
 
+  // Temp matrices if we need them.
+  Eigen::MatrixXd V_new;
+  Eigen::MatrixXi F_new;
+  Eigen::VectorXi O_new;
+
   // Dirty, dirty hack.
-  Eigen::VectorXi O_new = Ooff;
-  quickHack(Voff, Foff, O_new);
+  O_new = Ooff;
+  quickHack(Voff, Foff, O_new); // This will change markers to show what moved.
+                                // Use a temp variable.
   //Helpers::viewTriMesh(Voff, Foff, O_new);
-  //Helpers::viewTriMesh(Voff, Foff, Ooff);
   /*
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5);
   Helpers::writeMeshWithMarkers("mesh_post_mtets", Voff, Foff, Ooff);
@@ -896,7 +903,23 @@ void marchingOffsetSurface(
   Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
   Helpers::collapseSmallTriangles(Voff, Foff);
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
-  Helpers::writeMeshWithMarkers("mesh_post_rring", Voff, Foff, Ooff);
+
+  // Then, remesh.
+  printf("Before remeshing...\n");
+  Helpers::viewTriMesh(Voff, Foff, Ooff);
+  Helpers::writeMeshWithMarkers("mesh_pre_remesh", Voff, Foff, Ooff);
+  Remeshing::remesh(Voff, Foff, Ooff, V_new, F_new, O_new);
+  Voff = V_new;
+  Foff = F_new;
+  Ooff = O_new;
+  // Cleanup a bit.
+  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
+  Helpers::collapseSmallTriangles(Voff, Foff);
+  Helpers::removeUnreferenced(Voff, Foff, Ooff);
+  printf("After remeshing...\n");
+  Helpers::viewTriMesh(Voff, Foff, Ooff);
+
+  Helpers::writeMeshWithMarkers("mesh_post_remesh", Voff, Foff, Ooff);
 
   if (!Helpers::isMeshOkay(Voff, Foff)) {
     cout << __LINE__ << endl;

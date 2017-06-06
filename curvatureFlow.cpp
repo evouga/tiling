@@ -186,10 +186,11 @@ void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 
     // On the boundary.
     if (fabs(z - boundary_z) < GLOBAL::EPS) {
-      if (O(i) != GLOBAL::nonoriginal_marker)
+      if (O(i) != GLOBAL::nonoriginal_marker) {
         V_boundary_outer.insert(i);
-      else
+      } else {
         V_boundary_inner.insert(i);
+      }
 
       top_v_all.insert(i);
     }
@@ -402,7 +403,7 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   if (!Helpers::isMeshOkay(V_prepared, F_new)) {
     cout << __FILE__ << ":" << __LINE__ << ": "
          << "Extended mesh is ill-posed." << endl;
-    //exit(1);
+    exit(1);
   }
 
   // Mark the ones that are out of the original scale (new vertices)

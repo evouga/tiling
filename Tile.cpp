@@ -142,6 +142,8 @@ void Tile::triangulateSlice(const Slice &s, double z, double areaBound,
 
   // Need alter vertices to include bounds.
   int totpts = V_v.size();
+  // TODO: What to do if totpts == 0??
+
   Eigen::MatrixXd V(totpts + 4, 2);
   Eigen::MatrixXi E(totpts + 4, 2);
   Eigen::MatrixXd H(0, 2);

@@ -31,6 +31,7 @@ struct MeshTraits : public OpenMesh::DefaultTraits{
 			bool selected;
 			double doubleValue;
       int originalIndex;
+      bool _protected;
 		
 		public:
 			VertexT():selected(false),doubleValue(0.0),originalIndex(-1){}
@@ -41,8 +42,11 @@ struct MeshTraits : public OpenMesh::DefaultTraits{
 			const double& getDoubleValue() const{return doubleValue;}
 			void setDoubleValue(const double _doubleValue) {doubleValue = _doubleValue;}
 			
-			const double& getOriginalIndex() const{return originalIndex;}
-			void setOriginalIndex(const double _originalIndex) {originalIndex = _originalIndex;}
+			const int& getOriginalIndex() const{return originalIndex;}
+			void setOriginalIndex(const int _originalIndex) {originalIndex = _originalIndex;}
+	
+			const bool& isProtected() const{return _protected;}
+			void setProtected(const bool _isProtected) {_protected = _isProtected;}
 		};
 	
   EdgeTraits{

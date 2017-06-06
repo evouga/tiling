@@ -11,6 +11,8 @@
 #include "NearestTriangleSearch.h"
 #include "IsotropicRemeshing.h"
 
+#include "OpenMeshGlobals.h"
+
 #include <iostream>
 
 using std::cout;
@@ -30,7 +32,7 @@ IsotropicRemeshing::~IsotropicRemeshing()
 }
 
 void IsotropicRemeshing::remesh(TriangleMesh * _mesh,unsigned int _iterations,
-                                ISOTROPIC_REMESHING_TYPES types)
+                                int types)
 {
 	TriangleMesh mesh = *_mesh;
 	removeNANVertices(&mesh);
@@ -40,13 +42,32 @@ void IsotropicRemeshing::remesh(TriangleMesh * _mesh,unsigned int _iterations,
 	meshBackup = mesh;
     for( unsigned int i = 0; i<_iterations; ++i )
 	{
-		splitLongEdges(&mesh);
-		collapseShortEdges(&mesh);
-		equalizeValences(&mesh);
-		tangentialRelaxation(&mesh);	
-		projectToSurface(&mesh);
+    if (types & ISOTROPIC_REMESHING_TYPES::SPLIT_LONG_EDGES) {
+      printf("Splitting long edges...\n");
+      splitLongEdges(&mesh);
+    }
+    if (types & ISOTROPIC_REMESHING_TYPES::COLLAPSE_SHORT_EDGES) {
+      printf("Collapsing short edges...\n");
+      collapseShortEdges(&mesh);
+    }
+    if (types & ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES) {
+      printf("equalizing valences...\n");
+      equalizeValences(&mesh);
+    }
+    if (types & ISOTROPIC_REMESHING_TYPES::TANGENTIAL_RELAXATION) {
+      tangentialRelaxation(&mesh);	
+      printf("tangential relaxation...\n");
+    }
+    if (types & ISOTROPIC_REMESHING_TYPES::PROJECT_TO_SURFACE) {
+      printf("project to surface...\n");
+      projectToSurface(&mesh);
+    }
 	}
-	areaEqualization(&mesh);
+  if (types & ISOTROPIC_REMESHING_TYPES::AREA_EQUALIZATION) {
+    printf("Area equalization...\n");
+    areaEqualization(&mesh);
+  }
+  removeNANVertices(&mesh);
 	mesh.remove_property(update);
 	*_mesh = mesh;
 }
@@ -173,11 +194,22 @@ void IsotropicRemeshing::collapseShortEdges(TriangleMesh * _mesh)
 							hcol10 = false;
 						}
 					}													
+          
+          // Check for protected vertices.
+          if (hcol01) {
+             if (_mesh->data(v0).isProtected()) {
+               hcol01 = false;
+             }
+          }
+          if (hcol10) {
+             if (_mesh->data(v1).isProtected()) {
+               hcol10 = false;
+             }
+          }
 		
 					// topological rules
 					if (hcol01)  hcol01 = _mesh->is_collapse_ok(h01);
 					if (hcol10)  hcol10 = _mesh->is_collapse_ok(h10);
-
 
 					// both collapses possible: collapse into vertex w/ higher valence
 					
@@ -330,8 +362,8 @@ void IsotropicRemeshing::tangentialRelaxation(TriangleMesh * _mesh)
     }
 		
     for (v_it=_mesh->vertices_begin(); v_it!=v_end; ++v_it)
-		if( !_mesh->is_boundary( *v_it ) )
-			_mesh->point( *v_it ) += _mesh->property( update, *v_it );
+			if( !_mesh->is_boundary( *v_it ) && !_mesh->data(*v_it).isProtected() )
+        _mesh->point( *v_it ) += _mesh->property( update, *v_it );
   }
 }
 
@@ -433,12 +465,13 @@ void IsotropicRemeshing::areaEqualization(TriangleMesh * _mesh)
 						u -= n*lambda;
 					}
 					
-					_mesh->property( update, *v_it ) = u;
+          _mesh->property( update, *v_it ) = u;
 		  }
 		}
 			
 		for (v_it=_mesh->vertices_begin(); v_it!=v_end; ++v_it)
-			if( !_mesh->is_boundary( *v_it ) )
+      // If it's not protected, update the position.
+			if( !_mesh->is_boundary( *v_it ) && !_mesh->data(*v_it).isProtected() )
 				_mesh->point( *v_it ) += _mesh->property( update, *v_it );
 	  
 	}

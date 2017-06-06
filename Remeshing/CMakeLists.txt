@@ -9,6 +9,7 @@ find_package(OpenMesh REQUIRED)
 if (NOT OPENMESH_FOUND)
   message(FATAL_ERROR "OpenMesh not found --- You can download it from http://www.openmesh.org/download/ . Please not that only version 3.1 has been tested.")
 endif(NOT OPENMESH_FOUND)
+add_definitions(-DOM_STATIC_BUILD)
 ######################################################################
 
 find_package(Eigen REQUIRED)
@@ -20,6 +21,7 @@ SET(SRC_FILES
   IsotropicRemeshing.cpp
   NearestTriangleSearch.cpp
   OpenMeshConversion.cpp
+  Remesh.cpp
   SquareDistancePointToTriangle.cpp
   TriangleSurfaceArea.cpp
   )
@@ -30,6 +32,7 @@ SET(INCLUDE_FILES
   NearestTriangleSearch.h
   OpenMeshConversion.h
   OpenMeshGlobals.h
+  Remesh.h
   )
 
 INCLUDE_DIRECTORIES(${OPENMESH_INCLUDE_DIRS} ${EIGEN_INCLUDE_DIRS})

@@ -83,9 +83,14 @@ void SliceStack::triangulateSlice(int start, double areaBound,
 }
 
 int SliceStack::getSizeAt(int i) {
-  if (i > slices_.size())
+  if (i >= slices_.size())
     return -1;
   return slices_[i]->contours.size();
+}
+int SliceStack::getNumPtsAt(int i) {
+  if (i >= slices_.size()) return -1;
+
+  return this->slices_[i]->getNumPts();
 }
 
 set<int> SliceStack::getContoursAt(int i) {
