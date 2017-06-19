@@ -1,6 +1,7 @@
 #ifndef HELPERS_H
 #define HELPERS_H
 
+#include <set>
 #include <vector>
 
 #include <Eigen/Core>
@@ -11,8 +12,12 @@ namespace Helpers {
 bool is_edge_manifold(const Eigen::MatrixXi &F, Eigen::VectorXi &M);
 
 // For making the mesh manifold.
-void extractManifoldPatch(
-    Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O,
+bool isManifold(
+    const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
+    bool changeMarkers = true);
+
+bool extractManifoldPatch(
+    Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M,
     int minFaces=5, // must have more than one tet (4 faces)
     bool changeMarkers=true); 
 
@@ -49,6 +54,8 @@ void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
 
 void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
 
+bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                std::set<int> &vertex_issues, double eps=1e-11);
 bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                 double eps=1e-11);
 

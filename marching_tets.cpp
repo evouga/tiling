@@ -1010,7 +1010,8 @@ void marching_tets(
   Eigen::MatrixXi newF;
   Eigen::VectorXi SVJ, SVI, I2;
   // Helpers::viewTriMesh(NV, NF, facesMarkers);
-  igl::writeOFF("offset_mesh.off", NV, NF);
+  //igl::writeOFF("offset_mesh.off", NV, NF)
+  Helpers::writeMeshWithMarkers("offset_mesh", NV, NF, facesMarkers);
 
   /*
   igl::collapse_small_triangles(NV, NF, 1e-8, newF);
@@ -1018,6 +1019,7 @@ void marching_tets(
   NF = newF;
   */
 
+  /*
   igl::remove_duplicate_vertices(NV, NF, 1e-12, newV, SVI, SVJ, newF);
   I2.resize(newV.rows());
   I2.setConstant(-1);
@@ -1031,11 +1033,13 @@ void marching_tets(
   NF = newF;
   NV = newV;
   I = I2;
+  */
 
   // Now see if we have duplicated faces.
-  igl::resolve_duplicated_faces(NF, newF, SVJ);
-  NF = newF;
-  //Helpers::removeDuplicates(NV, NF, I);
+  //igl::resolve_duplicated_faces(NF, newF, SVJ);
+  //NF = newF;
+  Helpers::removeDuplicates(NV, NF, I);
+  Helpers::collapseSmallTriangles(NV, NF);
 
   igl::remove_unreferenced(NV, NF, newV, newF, SVI, SVJ);
   I2.resize(newV.rows());
@@ -1047,10 +1051,6 @@ void marching_tets(
   NV = newV;
   NF = newF;
 
-  //Helpers::extractManifoldPatch(NV, NF, I);
-
-  // Helpers::viewTriMesh(NV, NF, I);
-
 
   // orient everything correctly.
   Eigen::VectorXi C;
@@ -1060,4 +1060,22 @@ void marching_tets(
   igl::orient_outward(NV, NF, C, newF, SVJ);
   NF = newF;
   igl::writeOFF("offset_mesh_normals.off", NV, NF);
+
+#ifdef DEBUG_MESH
+  if (!Helpers::isMeshOkay(NV, NF)) {
+    printf("Error: Mesh is not okay at first...\n");
+  }
+  if (!Helpers::isManifold(NV, NF, I)) {
+    printf("Error: Mesh from marching tets not manifold!\n");
+    Helpers::viewTriMesh(NV, NF, I);
+    Eigen::VectorXi temp;
+    temp.resize(I.rows());
+    temp.setZero();
+    Helpers::isManifold(NV, NF, temp, true);
+    Helpers::writeMeshWithMarkers("marching_tets_manifold", NV, NF, temp);
+    cout << "See marching_tets_manifold.off for problems.\n";
+    exit(1);
+  }
+#endif
+
 }

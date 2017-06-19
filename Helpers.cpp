@@ -75,11 +75,9 @@ bool is_edge_manifold(const Eigen::MatrixXi &F,
 }
 
 
-// Overwrites inputs.
-// Each manifold patch must have at least minFaces faces or it will be
-// removed.
-void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
-                     Eigen::VectorXi &M, int minFaces, bool changeMarkers) {
+bool isManifold(
+    const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
+    bool changeMarkers) {
   bool is_manifold = igl::is_edge_manifold(F);
   Eigen::VectorXi B;
   bool is_v_manifold = igl::is_vertex_manifold(F, B);
@@ -109,6 +107,16 @@ void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
       }
     }
   }
+  return is_manifold && is_v_manifold;
+}
+// Overwrites inputs.
+// Each manifold patch must have at least minFaces faces or it will be
+// removed.
+bool extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
+                     Eigen::VectorXi &M, int minFaces, bool changeMarkers) {
+
+  if(isManifold(V, F, M, changeMarkers)) return true;
+
   Eigen::VectorXi patchId;
   int nPatch = igl::extract_manifold_patches(F, patchId);
   // Find the largest one.
@@ -129,6 +137,7 @@ void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
     }
   }
 
+  printf("Removing %d faces!\n", F.rows() - totalRows);
   // Remove all faces that are not associated with maxIdx.
   Eigen::MatrixXi newF(totalRows, F.cols());
   int newIdx = 0;
@@ -159,6 +168,8 @@ void extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
   M = M2;
 
   delete[] patchCount;
+
+  return false;
 }
 
 void removeDuplicates(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
@@ -351,6 +362,15 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       printf("Recomputing Laplacian\n");
       // Compute L on the mesh now.
       igl::cotmatrix(V_biharmonic, F_biharmonic, L);
+    } else if (key == 'H') {
+      printf("Viewing errors...\n");
+      std::set<int> vissues;
+      isMeshOkay(V_biharmonic, F_biharmonic, vissues);
+      // Set the vertices with issues.
+      for (int i : vissues) {
+        O_biharmonic(i) = 100;
+      }
+      set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
     } else if (key == 'C') {
       printf("Visualizing energy at each vertex.\n");
 
@@ -494,6 +514,12 @@ void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
 }
 
 bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) {
+  std::set<int> ignore;
+  return isMeshOkay(V, F, ignore, eps);
+}
+
+bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                std::set<int> &vertex_issues, double eps) {
   bool result = true;
   double min_area = 1e10;
 
@@ -504,6 +530,7 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) 
       // Check if vertex indices are valid.
       if (F(i, j) < 0 || F(i, j) >= V.rows()) {
         cout << "Vertex index " << F(i, j) << " is out of bounds." << endl;
+        vertex_issues.insert(F(i, j));
         result = false;
       }
 
@@ -519,6 +546,9 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) 
       cout << "Face " << i << " has area " << area << "("
            << F(i, 0) << ", " << F(i, 1) << ", " << F(i, 2) << ")\n";
       result = false;
+      vertex_issues.insert(F(i, 0));
+      vertex_issues.insert(F(i, 1));
+      vertex_issues.insert(F(i, 2));
     }
 
     min_area = min(min_area, area);
@@ -533,6 +563,7 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) 
 
       cout << "Vertex " << i << " not used in faces." << endl;
       result = false;
+      vertex_issues.insert(i);
     }
   }
 
@@ -548,6 +579,7 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, double eps) 
     if (has_nan) {
       cout << "Vertex " << i << " has nans. " << V.row(i) << endl;
       result = false;
+      vertex_issues.insert(i);
     }
   }
 

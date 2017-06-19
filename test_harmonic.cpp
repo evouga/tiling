@@ -24,8 +24,7 @@ int getOrig(const char* fn, const char* printf_str, E &O, T dummy) {
   ssize_t read;
   std::vector<T> orig;
   while((read = getline(&line, &len, inf)) != -1) {
-    T val;
-    sscanf(line, printf_str, &val);
+    T val; sscanf(line, printf_str, &val);
     orig.push_back(val);
   }
   fclose(inf);
@@ -152,24 +151,14 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-  igl::viewer::Viewer v;
-  Eigen::MatrixXd cols;
-  igl::jet(C, true, cols);
-  v.data.clear();
-  v.data.set_mesh(V, F);;
-  v.data.set_colors(cols);
-  v.launch();
-
   printf("Viewing before:\n");
-  // Let's make sure it's manifold.
-  Helpers::extractManifoldPatch(V, F, C);
-  printf("Viewing after:\n");
+  Helpers::viewTriMesh(V, F, C);
 
-  igl::jet(C, true, cols);
-  v.data.clear();
-  v.data.set_mesh(V, F);;
-  v.data.set_colors(cols);
-  v.launch();
+  // Let's make sure it's manifold.
+  Helpers::extractManifoldPatch(V, F, C, true);
+
+  printf("Viewing after:\n");
+  Helpers::viewTriMesh(V, F, C);
 
   //biharmonic_view(V, F, C, Vc, true);
   double score = biharmonic_new(V, F, C, Vc, Fc, Cc);

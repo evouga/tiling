@@ -10,13 +10,13 @@
 #include <Eigen/Core>
 #include <igl/writeOFF.h>
 
-#include "Tiler.h"
+#include "Helpers.h"
 #include "SliceStack.h"
+#include "Tiler.h"
+#include "TilingUtils.h"
+#include "curvatureFlow.h"
 #include "glob_defs.h"
 #include "viewTetMesh.h"
-#include "TilingUtils.h"
-#include "Helpers.h"
-#include "curvatureFlow.h"
 
 using namespace std;
 using namespace Tiler;
@@ -184,8 +184,11 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    cout << "Level: " << level << endl;
-    cout << "Contours: " << ss.getSizeAt(level) << endl;
+    cout << "############################################\n";
+    cout << "# Level: " << level << endl;
+    cout << "# Contours: " << ss.getSizeAt(level) << endl;
+    cout << "# Number of Vertices: " << ss.getNumPtsAt(level) << endl;
+    cout << "############################################\n";
 
     // Map from contours used to ConnectedComponent mesh.
     map<set<int>, ConnectedComponent> contours_to_component =

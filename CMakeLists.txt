@@ -84,6 +84,11 @@ message("meshfix libraries: ${MESHFIX_LIBRARIES}")
 add_subdirectory(Remeshing)
 ######################################################################
 
+option(MESH_DEBUG "Include debug information in build (not for production" OFF)
+if (MESH_DEBUG)
+  add_definitions("-DDEBUG_MESH")
+endif(MESH_DEBUG)
+
 ######################################################################
 ### Prepare the build environment
 include_directories(${LIBIGL_INCLUDE_DIRS})

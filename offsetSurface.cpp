@@ -784,7 +784,7 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
 
 // Will push the nonoriginal vertices on the boundary up or down.
 void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
-               double shift = 2 * GLOBAL::EPS) {
+               double shift = 3 * GLOBAL::EPS) {
   // The boundary vertices.
   double zmin = 1e10;
   double zmax = -1e10;
@@ -797,11 +797,12 @@ void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
   for (int i = 0; i < F.rows(); ++i) {
     for (int j = 0; j < F.cols(); ++j) {
       // If it's not on the boundary, don't care.
-      if (V(F(i, j), 2) != zmin && V(F(i, j), 2) != zmax) continue;
+      if (fabs(V(F(i, j), 2) - zmin) > GLOBAL::EPS && 
+          fabs(V(F(i, j), 2) - zmax) > GLOBAL::EPS) continue;
       // Don't touch things that are original.
       if (M(F(i, j)) != GLOBAL::nonoriginal_marker) continue;
       // Move everything up by epsilon.
-      if (V(F(i, j), 2) == zmin) {
+      if (fabs(V(F(i, j), 2) - zmin) > GLOBAL::EPS) {
         V(F(i, j), 2) += shift;
         M(F(i, j)) = 10;
       } else {
@@ -896,31 +897,75 @@ void marchingOffsetSurface(
   Foff = F_new;
   Ooff = O_new;
   */
-  Helpers::removeUnreferenced(Voff, Foff, Ooff);
+  //Helpers::removeUnreferenced(Voff, Foff, Ooff);
   //Helpers::viewTriMesh(Voff, Foff, Ooff);
+#ifdef DEBUG_MESH
+  if (!Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5)) {
+    cout << __FILE__ << ":" << __LINE__ << ": "
+         << "Mesh before remeshing is not manifold! Go fix your code." << endl;
+    Helpers::writeMeshWithMarkers("pre_remesh_manifold", Voff, Foff, Ooff);
+    cout << "See pre_remesh_manifold.off for problems.\n";
+    exit(1);
+  }
+  if (!Helpers::isMeshOkay(Voff, Foff)) {
+    cout << __FILE__ << ":" << __LINE__ << ": "
+         << "Mesh before remeshing is bad! Go fix your code." << endl;
+    Helpers::writeMeshWithMarkers("pre_remesh", Voff, Foff, Ooff);
+    cout << "See pre_remesh.off for problems.\n";
+    exit(1);
+  }
+#endif
 
   Eigen::VectorXi tmp;
-  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
-  Helpers::collapseSmallTriangles(Voff, Foff);
-  Helpers::removeUnreferenced(Voff, Foff, Ooff);
+  //Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
+  //Helpers::collapseSmallTriangles(Voff, Foff);
+  //Helpers::removeUnreferenced(Voff, Foff, Ooff);
 
   // Then, remesh.
+  /*
+  if (!Helpers::isMeshOkay(Voff, Foff)) {
+    printf("Something is wrong before remeshing!!\n");
+  } else {
+    printf("Mesh is okay before remeshing\n");
+  }
   printf("Before remeshing...\n");
-  Helpers::viewTriMesh(Voff, Foff, Ooff);
+  //Helpers::viewTriMesh(Voff, Foff, Ooff);
   Helpers::writeMeshWithMarkers("mesh_pre_remesh", Voff, Foff, Ooff);
+  */
   Remeshing::remesh(Voff, Foff, Ooff, V_new, F_new, O_new);
   Voff = V_new;
   Foff = F_new;
   Ooff = O_new;
   // Cleanup a bit.
-  Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5, true);
+  if (!Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5)) {
+    cout << __FILE__ << ":" << __LINE__ << ": "
+         << "Mesh after remeshing is not manifold! Go fix your code." << endl;
+    Helpers::writeMeshWithMarkers("post_remesh_manifold", Voff, Foff, Ooff);
+    cout << "See post_remesh_manifold.off for problems.\n";
+    exit(1);
+  }
   Helpers::collapseSmallTriangles(Voff, Foff);
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
+#ifdef DEBUG_MESH
+  if (!Helpers::isMeshOkay(Voff, Foff)) {
+    cout << __FILE__ << ":" << __LINE__ << ": "
+         << "Mesh after remeshing is bad! Go fix your code." << endl;
+    Helpers::writeMeshWithMarkers("post_remesh", Voff, Foff, Ooff);
+    cout << "See post_remesh.off for problems.\n";
+    exit(1);
+  }
+#endif
+  /*
+  if (!Helpers::isMeshOkay(Voff, Foff)) {
+    printf("Something is wrong after remeshing!!\n");
+  } else {
+    printf("Mesh is okay after remeshing\n");
+  }
   printf("After remeshing...\n");
-  Helpers::viewTriMesh(Voff, Foff, Ooff);
+  //Helpers::viewTriMesh(Voff, Foff, Ooff);
 
   Helpers::writeMeshWithMarkers("mesh_post_remesh", Voff, Foff, Ooff);
-
+  */
   if (!Helpers::isMeshOkay(Voff, Foff)) {
     cout << __LINE__ << endl;
     Helpers::viewTriMesh(Voff, Foff, Ooff);

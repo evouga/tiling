@@ -1,4 +1,5 @@
 build/
+debug/
 FPNCT_series/
 *~
 CMakeFiles/
@@ -9,3 +10,8 @@ example_bin
 libigl/
 *.swp
 .DS_Store
+*.o
+*.png
+*.aux
+*.log
+*.pdf
