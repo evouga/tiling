@@ -87,9 +87,11 @@ void remesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::Vec
   // Then, do the remeshing--but only split long edge, collapse short edges, 
   // and equalize valences.
   IsotropicRemeshing ir(e_length);
-  int types = ISOTROPIC_REMESHING_TYPES::SPLIT_LONG_EDGES |
-              ISOTROPIC_REMESHING_TYPES::COLLAPSE_SHORT_EDGES |
-              ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES;
+  //int types = ISOTROPIC_REMESHING_TYPES::SPLIT_LONG_EDGES |
+              //ISOTROPIC_REMESHING_TYPES::COLLAPSE_SHORT_EDGES |
+              //ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES;
+  //int types = ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES;
+  int types = 0;
   ir.remesh(&tri, 1, types);
 
   // Then, copy it all back.

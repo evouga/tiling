@@ -468,7 +468,7 @@ void SliceStack::computeLaplace(const Eigen::MatrixXd &TV, const Eigen::MatrixXi
 	}
 
   if (laplace_DEBUG) {
-    printf("done! Number non-zeros is %d\n", L.nonZeros());
+    printf("done! Number non-zeros is %ld\n", L.nonZeros());
     printf("Solving energy constraints...");
   }
 

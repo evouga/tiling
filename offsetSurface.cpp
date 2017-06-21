@@ -377,7 +377,7 @@ int removeRing(const Eigen::MatrixXd &V_old, const Eigen::MatrixXi &F_old,
   //vector<int> remove = getEdgesToRemove(V, E, O);
   //for (int e : remove) {
   for (int i = 0; i < E.rows(); ++i) {
-    printf("i is %d/%d (%d,%d)\n", i, E.rows(), EF(i, 0), EF(i, 1));
+    printf("i is %d/%ld (%d,%d)\n", i, E.rows(), EF(i, 0), EF(i, 1));
     // Means it's already done.
     if (E(i, 0) == E(i, 1)) {
       //printf("Already done edge with %d=%d\n", E(e, 0), E(e, 1));
@@ -714,6 +714,7 @@ bool hasBoundary(int idx, const Eigen::MatrixXi &TT, const Eigen::VectorXd &C) {
   }
   return false;
 }
+/*
 void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
                                  const Eigen::MatrixXi &TT,
                                  const Eigen::VectorXi &TO,
@@ -781,6 +782,7 @@ void generateOffsetSurface_naive(const Eigen::MatrixXd &V,
   igl::unique_rows(Foff, Fu,unique_to_all,all_to_unique);
   Foff = Fu;
 }
+*/
 
 // Will push the nonoriginal vertices on the boundary up or down.
 void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
@@ -813,6 +815,20 @@ void quickHack(Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXi &M,
     }
 
   }
+}
+
+double minVertexDist(const Eigen::MatrixXd &V) {
+  double min = -1;
+  for (int i = 0; i < V.rows(); ++i) {
+    for (int j = i+1; j < V.rows(); ++j) {
+      double thisMin = (V.row(i) - V.row(j)).norm();
+      if (min == -1 || thisMin < min) {
+        min = thisMin;
+      }
+    }
+  }
+
+  return min;
 }
 
 void marchingOffsetSurface(
@@ -900,7 +916,9 @@ void marchingOffsetSurface(
   //Helpers::removeUnreferenced(Voff, Foff, Ooff);
   //Helpers::viewTriMesh(Voff, Foff, Ooff);
 #ifdef DEBUG_MESH
-  if (!Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5)) {
+  double minV = minVertexDist(Voff);
+  printf("\n\n\nBefore remeshing... (min dist %lf)\n", minV);
+  if (!Helpers::isManifold(Voff, Foff, Ooff)) {
     cout << __FILE__ << ":" << __LINE__ << ": "
          << "Mesh before remeshing is not manifold! Go fix your code." << endl;
     Helpers::writeMeshWithMarkers("pre_remesh_manifold", Voff, Foff, Ooff);
@@ -923,13 +941,8 @@ void marchingOffsetSurface(
 
   // Then, remesh.
   /*
-  if (!Helpers::isMeshOkay(Voff, Foff)) {
-    printf("Something is wrong before remeshing!!\n");
-  } else {
-    printf("Mesh is okay before remeshing\n");
-  }
   printf("Before remeshing...\n");
-  //Helpers::viewTriMesh(Voff, Foff, Ooff);
+  Helpers::viewTriMesh(Voff, Foff, Ooff);
   Helpers::writeMeshWithMarkers("mesh_pre_remesh", Voff, Foff, Ooff);
   */
   Remeshing::remesh(Voff, Foff, Ooff, V_new, F_new, O_new);
@@ -937,23 +950,28 @@ void marchingOffsetSurface(
   Foff = F_new;
   Ooff = O_new;
   // Cleanup a bit.
-  if (!Helpers::extractManifoldPatch(Voff, Foff, Ooff, 5)) {
+  //Helpers::removeDuplicates(Voff, Foff, Ooff);
+  //Helpers::collapseSmallTriangles(Voff, Foff, 0);
+  //Helpers::collapseShortEdges(Voff, Foff, Ooff, 0.0);
+  Helpers::removeUnreferenced(Voff, Foff, Ooff);
+#ifdef DEBUG_MESH
+  minV = minVertexDist(Voff);
+  printf("min distance is %lf\n", minV);
+  if (!Helpers::isManifold(Voff, Foff, Ooff, 5)) {
     cout << __FILE__ << ":" << __LINE__ << ": "
          << "Mesh after remeshing is not manifold! Go fix your code." << endl;
     Helpers::writeMeshWithMarkers("post_remesh_manifold", Voff, Foff, Ooff);
     cout << "See post_remesh_manifold.off for problems.\n";
     exit(1);
   }
-  Helpers::collapseSmallTriangles(Voff, Foff);
-  Helpers::removeUnreferenced(Voff, Foff, Ooff);
-#ifdef DEBUG_MESH
-  if (!Helpers::isMeshOkay(Voff, Foff)) {
+  if (!Helpers::isMeshOkay(Voff, Foff, 1e-15)) {
     cout << __FILE__ << ":" << __LINE__ << ": "
          << "Mesh after remeshing is bad! Go fix your code." << endl;
     Helpers::writeMeshWithMarkers("post_remesh", Voff, Foff, Ooff);
     cout << "See post_remesh.off for problems.\n";
     exit(1);
   }
+  printf("End of remeshing\n\n\n");
 #endif
   /*
   if (!Helpers::isMeshOkay(Voff, Foff)) {
@@ -962,16 +980,16 @@ void marchingOffsetSurface(
     printf("Mesh is okay after remeshing\n");
   }
   printf("After remeshing...\n");
-  //Helpers::viewTriMesh(Voff, Foff, Ooff);
+  Helpers::viewTriMesh(Voff, Foff, Ooff);
 
   Helpers::writeMeshWithMarkers("mesh_post_remesh", Voff, Foff, Ooff);
-  */
   if (!Helpers::isMeshOkay(Voff, Foff)) {
     cout << __LINE__ << endl;
     Helpers::viewTriMesh(Voff, Foff, Ooff);
     cout << "Marching offset surface mesh is ill-posed." << endl;
     exit(1);
   }
+  */
 }
 
 } // namespace OffsetSurface

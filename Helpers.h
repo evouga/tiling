@@ -51,13 +51,15 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
 
 void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
                             double eps=1e-8);
+void collapseShortEdges(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M,
+                        double min_el=1e-8);
 
 void removeUnreferenced(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &O);
 
 bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                std::set<int> &vertex_issues, double eps=1e-11);
+                std::set<int> &vertex_issues, double eps=0);
 bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                double eps=1e-11);
+                double eps=0);
 
 bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A);
 

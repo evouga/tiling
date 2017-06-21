@@ -27,12 +27,14 @@ void generateOffsetSurface(
     );
 
 // Returns offset vertices, faces, and original markers.
+/*
 void generateOffsetSurface_naive(
     const Eigen::MatrixXd &V,
     const Eigen::MatrixXi &TT,
     const Eigen::VectorXi &TO,
     const Eigen::VectorXd &C, double off,
     Eigen::MatrixXd &Voff, Eigen::MatrixXi &Foff, Eigen::VectorXi &Ooff);
+    */
 
 // Offset surface using marching tets.
 void marchingOffsetSurface(

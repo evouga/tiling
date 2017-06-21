@@ -73,8 +73,11 @@ void combineComponentsIntoMesh(const vector<Component*> &components,
     Eigen::MatrixXd V1 = component->V;
     Eigen::MatrixXi F1 = component->F;
     Eigen::VectorXi O1 = component->M;
-    Helpers::extractManifoldPatch(V1, F1, O1);
-    //Helpers::viewTriMesh(V1, F1, O1);
+    if (!Helpers::isManifold(V1, F1, O1)) {
+      Eigen::VectorXi temp = O1;
+      printf("Here is the non-manifold mesh:\n");
+      Helpers::viewTriMesh(V1, F1, temp);
+    }
     tileVs.push_back(component->V);
     tileFs.push_back(component->F);
     tileMs.push_back(component->M);
@@ -85,6 +88,7 @@ void combineComponentsIntoMesh(const vector<Component*> &components,
   Eigen::VectorXi tileM;
 
   Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
+  printf("Calling extractShell from %s:%d\n", __FILE__, __LINE__);
   Helpers::extractShell(tileV, tileF, tileM, V, F, O);
 }
 
@@ -97,6 +101,11 @@ double energy(Tile *tile, bool sum_individual=true) {
       const Eigen::MatrixXd &V = component->V;
       const Eigen::MatrixXi &F = component->F;
       const Eigen::VectorXi &O = component->M;
+      Eigen::VectorXi temp = O;
+      if (!Helpers::isManifold(V, F, temp, true)) {
+        printf("[%s:%d] is not manifold!\n", __FILE__, __LINE__);
+        Helpers::viewTriMesh(V, F, temp);
+      }
 
       Eigen::MatrixXd V_shell, V_biharmonic;
       Eigen::MatrixXi F_shell, F_biharmonic;
@@ -104,6 +113,7 @@ double energy(Tile *tile, bool sum_individual=true) {
       vector<int> new_vertices;
 
       // Make sure to pass in a triangle mesh.
+      printf("Calling extractShell from %s:%d\n", __FILE__, __LINE__);
       Helpers::extractShell(V, F, O, V_shell, F_shell, O_shell);
       score += biharmonic_new(V_shell, F_shell, O_shell,
                               V_biharmonic, F_biharmonic, O_biharmonic,
@@ -135,6 +145,7 @@ void viewTile(Tile *tile, int num_tiles=0, bool save=false) {
   Eigen::MatrixXi F;
   Eigen::VectorXi M;
 
+  printf("calling combineComponents from %s:%d\n", __FILE__, __LINE__);
   combineComponentsIntoMesh(getTileComponents(tile, num_tiles), V, F, M);
   Helpers::viewTriMesh(V, F, M);
 
@@ -253,9 +264,9 @@ int main(int argc, char *argv[]) {
         double e2 = energy(best_tiles[tile_id]);
 
         printf("First Score: %lf (vs %lf)\n", e1, e2);
-        //viewTile(tile, 1);
+        viewTile(tile, 1);
         printf("Second Score: %lf\n", e2);
-        //viewTile(best_tiles[tile_id], 1);
+        viewTile(best_tiles[tile_id], 1);
 
         // Purge the loser.
         if (e1 < e2) {
@@ -278,14 +289,15 @@ int main(int argc, char *argv[]) {
     botM = topM;
 
     // For debugging.
-    if (level > start && (level - start) % 5 == 0) {
+    //if (level > start && (level - start) % 5 == 0) {
+    if (level > start) {
       int current_tile = 0;
 
       for (Tile *tile : generated[level]) {
         printf(" -> Tile %d/%lu\n", ++current_tile, generated[level].size());
-        if (current_tile > 35) {
+        //if (current_tile > 35) {
           viewTile(tile);
-        }
+        //}
       }
     }
   }

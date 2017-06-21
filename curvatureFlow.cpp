@@ -682,7 +682,7 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     //for (int i = 0; i < V.rows(); ++i) {
     //  M.coeffRef(i,i) = 0;
     //}
-    printf("Number of nonzeros for M: %d vs rows %d\n", M.nonZeros(), M.rows());
+    printf("Number of nonzeros for M: %ld vs rows %ld\n", M.nonZeros(), M.rows());
     // Solve (M-delta*L) U = M*U
     const auto &S = (M - timestep*L);
     //Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver(S);

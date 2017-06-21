@@ -16,9 +16,12 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 
-#include <igl/copyleft/tetgen/tetrahedralize.h>
+#include <igl/collapse_edge.h>
+#include <igl/collapse_small_triangles.h>
 #include <igl/copyleft/cgal/remesh_self_intersections.h>
+#include <igl/copyleft/tetgen/tetrahedralize.h>
 #include <igl/cotmatrix.h>
+#include <igl/edge_flaps.h>
 #include <igl/extract_manifold_patches.h>
 #include <igl/is_edge_manifold.h>
 #include <igl/is_vertex_manifold.h>
@@ -29,7 +32,6 @@
 #include <igl/triangle/triangulate.h>
 #include <igl/viewer/Viewer.h>
 #include <igl/writeOFF.h>
-#include <igl/collapse_small_triangles.h>
 
 using namespace std;
 
@@ -87,7 +89,7 @@ bool isManifold(
       if (!B(i)) {
         printf("Vertex %d has %d (was %d)\n", i, B(i), M(i));
         if (changeMarkers)
-          M(i) = 100;
+          M(i) = GLOBAL::nonmanifold_marker;
       }
     }
   }
@@ -98,15 +100,16 @@ bool isManifold(
     printf("Errors at: \n");
     for (int i = 0; i < F.rows(); ++i) {
       if (NME(i)) {
-        printf("  row %d repeated %d\n", i, NME(i));
+        printf("  face %d repeated %d\n", i, NME(i));
         for (int j = 0; j < F.cols(); ++j) {
           if (changeMarkers)
-            M(F(i,j)) = 100;
+            M(F(i,j)) = GLOBAL::nonmanifold_marker;
           printf("   -> Setting %d to 100\n", F(i,j));
         }
       }
     }
   }
+
   return is_manifold && is_v_manifold;
 }
 // Overwrites inputs.
@@ -137,7 +140,7 @@ bool extractManifoldPatch(Eigen::MatrixXd &V, Eigen::MatrixXi &F,
     }
   }
 
-  printf("Removing %d faces!\n", F.rows() - totalRows);
+  printf("Removing %ld faces!\n", F.rows() - totalRows);
   // Remove all faces that are not associated with maxIdx.
   Eigen::MatrixXi newF(totalRows, F.cols());
   int newIdx = 0;
@@ -281,7 +284,8 @@ void set_viewer(igl::viewer::Viewer &viewer,
 
     viewer.data.add_label(V.row(i), to_string(M(i)));
 
-    if (M(i) == -100 || M(i) == 100)
+    // Don't ignore if it's a manifoldness marker.
+    if (M(i) == -GLOBAL::nonmanifold_marker || M(i) == GLOBAL::nonmanifold_marker)
       continue;
 
     used.insert(M(i));
@@ -458,6 +462,7 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
   Eigen::MatrixXi F_unique;
   Eigen::VectorXi J;
   igl::resolve_duplicated_faces(F1, F_unique, J);
+  //F_unique = F1;
 
   // J is the same size as V
   igl::remove_unreferenced(V1, F_unique, V2, F2, J);
@@ -471,11 +476,82 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
   }
 
   // Also make sure it's manifold.
-  extractManifoldPatch(V2, F2, M2);
+  Eigen::VectorXi temp = M2;
+  if (!isManifold(V2, F2, temp, true)) {
+    //extractManifoldPatch(V2, F2, M2);
+    printf("ExtractShell is not manifold! View it now.\n");
+    viewTriMesh(V2, F2, temp);
+    temp = M1;
+    if (isManifold(V1, F1, temp, true)) {
+      printf("Original mesh is manifold.\n");
+    } else {
+      printf("Original mesh is not manifold either.\n");
+    }
+    viewTriMesh(V1, F1, temp);
+    exit(1);
+  }
+}
+
+void collapseShortEdges(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M,
+                        double min_el) {
+  // Get the edges.
+  Eigen::MatrixXi E, EF,EI;
+  Eigen::VectorXi EMAP;
+  igl::edge_flaps(F, E,EMAP,EF,EI);
+  // The boundary vertices.
+  double z_min = 1e10;
+  double z_max = -1e10;
+  for (int i = 0; i < V.rows(); i++) {
+    z_min = min(z_min, V(i, 2));
+    z_max = max(z_max, V(i, 2));
+  }
+  
+  // Iterate over each edge.
+  for (int i = 0; i < E.rows(); ++i) {
+    // Ignore edges that are original.
+    if (M(E(i, 0)) != GLOBAL::nonoriginal_marker ||
+        M(E(i, 1)) != GLOBAL::nonoriginal_marker) continue;
+
+    // Compute the edge length.
+    double el = (V.row(E(i, 0)) - V.row(E(i, 1))).norm();
+    if (el < min_el) {
+      // Collapse the edge arbitrarily to the first index.
+      int orig = E(i, 0);
+      bool worked = igl::collapse_edge(i, V.row(orig), V,F,E, EMAP, EF,EI);
+      if (!worked) {
+        printf("Error: Edge collapse (length %lf vs min of %lf) didn't work...\n",
+               el, min_el);
+      }
+    }
+  }
+  
+  // Get valid faces.
+  vector<int> valid_f;
+  for (int i = 0; i < F.rows(); ++i) {
+    int valid = 0;
+    for (int j = 0; j < F.cols(); ++j) {
+      valid++;
+      if (F(i, j) == IGL_COLLAPSE_EDGE_NULL) {
+        valid--;
+      }
+    }
+    if (valid == 3) {
+      valid_f.push_back(i);
+    } else if (valid > 0) {
+      printf("Found a face with %d valid vertices?\n", valid);
+    }
+  }
+  
+  Eigen::MatrixXi F_new(valid_f.size(), 3);
+  for (int i = 0; i < valid_f.size(); ++i) {
+    F_new.row(i) = F.row(valid_f[i]);
+  }
+  F = F_new;
 }
 
 void collapseSmallTriangles(const Eigen::MatrixXd &V, Eigen::MatrixXi &F,
                             double eps) {
+
   Eigen::MatrixXi F_tmp;
   igl::collapse_small_triangles(V, F, eps, F_tmp);
 
@@ -543,8 +619,8 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     double area = u.cross(v).norm();
 
     if (area < eps) {
-      cout << "Face " << i << " has area " << area << "("
-           << F(i, 0) << ", " << F(i, 1) << ", " << F(i, 2) << ")\n";
+      printf("Face %d has area %le (%d,%d,%d)\n",
+             i, area, F(i, 0), F(i, 1), F(i, 2));
       result = false;
       vertex_issues.insert(F(i, 0));
       vertex_issues.insert(F(i, 1));
@@ -552,6 +628,13 @@ bool isMeshOkay(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     }
 
     min_area = min(min_area, area);
+
+    // Also make sure faces don't have duplicate points.
+    if (F(i, 0) == F(i, 1) || F(i, 0) == F(i, 2) || F(i, 1) == F(i, 2)) {
+      cout << "Face " << i << " has duplicate points ("
+           << F(i, 0) << ", " << F(i, 1) << ", " << F(i, 2) << ")\n";
+      result = false;
+    }
   }
 
   int unused = 0;

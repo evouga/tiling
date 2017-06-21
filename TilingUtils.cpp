@@ -124,14 +124,16 @@ vector<ConnectedComponent> allPossibleTiles(
 
   // Go through all offsets and generate surfaces.
   // for (double offset: unique_offsets) {
-  // for (double offset = 0.9; offset >= 0.1; offset -= 0.1) {
-  for (double offset = 0.1; offset <= 1.0; offset += 0.1) {
+  for (double offset = 0.9; offset >= 0.1; offset -= 0.1) {
+  //for (double offset = 0.1; offset <= 1.0; offset += 0.1) {
     Eigen::MatrixXd offsetV;
     Eigen::MatrixXi offsetF;
     Eigen::VectorXi offsetO;
 
-    OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
-                                               offset, offsetV, offsetF, offsetO);
+    //OffsetSurface::generateOffsetSurface_naive(TV, TT, TO, H,
+    //                                           offset, offsetV, offsetF, offsetO);
+    OffsetSurface::marchingOffsetSurface(TV, TT, TO, H, offset,
+                                         offsetV, offsetF, offsetO);
 
     vector<ConnectedComponent> components = getConnectedComponents(offsetV,
                                                                    offsetF,

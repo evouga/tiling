@@ -451,7 +451,7 @@ void case0Out(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
     }
   } else if (identical.size() == 0) {
     if (outside.size()) {
-      printf("Unknown: in:%d out:%d\n", inside.size(), outside.size());
+      printf("Unknown: in:%lu out:%lu\n", inside.size(), outside.size());
     }
     // Add all 4 faces.
     Eigen::RowVector3i f1, f2, f3, f4;
@@ -580,6 +580,7 @@ void case1In(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
     dd.new_verts.push_back(split(dd.V.row(inV), dd.V.row(outV3),
                               dd.H(inV), dd.H(outV3), dd.offset));
     int h1 = newV_pos, h2 = newV_pos + 1, h3 = newV_pos + 2;
+    /* Debugging stuff we can safely remove.
     if (inV == 281 && h3 == 5284) {
       printf("%d, %d %d %d\n", inV, outV1, outV2, outV3);
       printf("  %d,%d,%d\n", h1, h2, h3);
@@ -608,6 +609,7 @@ void case1In(MarchingTetsDat &dd, const Eigen::RowVectorXi &T,
       printf("+%d, %d %d %d\n", inV, outV1, outV2, outV3);
       printf("+  %d,%d,%d\n", h1, h2, h3);
     }
+    */
 
     // Don't care about normals here.
     Eigen::RowVector3i newF({h1, h2, h3});
@@ -1019,8 +1021,8 @@ void marching_tets(
   NF = newF;
   */
 
-  /*
-  igl::remove_duplicate_vertices(NV, NF, 1e-12, newV, SVI, SVJ, newF);
+  ///*
+  igl::remove_duplicate_vertices(NV, NF, 1e-20, newV, SVI, SVJ, newF);
   I2.resize(newV.rows());
   I2.setConstant(-1);
   for (int i = 0; i < NV.rows(); ++i) {
@@ -1033,13 +1035,18 @@ void marching_tets(
   NF = newF;
   NV = newV;
   I = I2;
-  */
 
   // Now see if we have duplicated faces.
   //igl::resolve_duplicated_faces(NF, newF, SVJ);
   //NF = newF;
-  Helpers::removeDuplicates(NV, NF, I);
-  Helpers::collapseSmallTriangles(NV, NF);
+  //*/
+
+  // Other option is to do these two:
+  // These are bad because sometimes the "small" triangles are not area zero,
+  // and doing the removeDuplicates will delete these triangles and make the
+  // mesh non-manifold. Better to wait for remeshing later.
+  //Helpers::removeDuplicates(NV, NF, I);
+  //Helpers::collapseSmallTriangles(NV, NF);
 
   igl::remove_unreferenced(NV, NF, newV, newF, SVI, SVJ);
   I2.resize(newV.rows());
@@ -1059,7 +1066,7 @@ void marching_tets(
   NF = newF;
   igl::orient_outward(NV, NF, C, newF, SVJ);
   NF = newF;
-  igl::writeOFF("offset_mesh_normals.off", NV, NF);
+  //igl::writeOFF("offset_mesh_normals.off", NV, NF);
 
 #ifdef DEBUG_MESH
   if (!Helpers::isMeshOkay(NV, NF)) {
@@ -1067,15 +1074,14 @@ void marching_tets(
   }
   if (!Helpers::isManifold(NV, NF, I)) {
     printf("Error: Mesh from marching tets not manifold!\n");
-    Helpers::viewTriMesh(NV, NF, I);
     Eigen::VectorXi temp;
     temp.resize(I.rows());
     temp.setZero();
     Helpers::isManifold(NV, NF, temp, true);
+    Helpers::viewTriMesh(NV, NF, temp);
     Helpers::writeMeshWithMarkers("marching_tets_manifold", NV, NF, temp);
     cout << "See marching_tets_manifold.off for problems.\n";
     exit(1);
   }
 #endif
-
 }
