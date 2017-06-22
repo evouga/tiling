@@ -35,6 +35,8 @@ void remesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::Vec
     zmin = std::min(zmin, V(i, 2));
     zmax = std::max(zmax, V(i, 2));
   }
+  Eigen::VectorXd minV = V.colwise().minCoeff(),
+       maxV = V.colwise().maxCoeff();
 
   // Compute average edge length.
   if (e_length <= 0) {
@@ -89,9 +91,12 @@ void remesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::Vec
   IsotropicRemeshing ir(e_length);
   //int types = ISOTROPIC_REMESHING_TYPES::SPLIT_LONG_EDGES |
               //ISOTROPIC_REMESHING_TYPES::COLLAPSE_SHORT_EDGES |
-              //ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES;
-  //int types = ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES;
-  int types = 0;
+              //ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES |
+              //ISOTROPIC_REMESHING_TYPES::AREA_EQUALIZATION;
+  ir.setBoundingBox(TriangleMesh::Point(maxV(0), maxV(1), maxV(2)),
+                    TriangleMesh::Point(minV(0), minV(1), minV(2)));
+  int types = ISOTROPIC_REMESHING_TYPES::EQUALIZE_VALENCES |
+      ISOTROPIC_REMESHING_TYPES::AREA_EQUALIZATION;
   ir.remesh(&tri, 1, types);
 
   // Then, copy it all back.
@@ -112,10 +117,14 @@ void remesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::Vec
         printf("point %d(m:%d new:%d) moved by %lf\n", oidx, M(oidx), i, moved);
         Mout(i) = 10;
       }
-      if (V(i, 2) < zmin || V(i, 2) > zmax) {
-        printf("point %d(%d) moved out of bounds! by %lf vs %lf,%lf\n",
-               oidx, M(oidx), V(i, 2), zmin, zmax);
-      }
+    }
+    int oidx = origIdx(i);
+    if (Vout(i, 2) - zmin < 0 || 
+        zmax - Vout(i, 2) < 0) {
+      printf("point %d(%d) moved out of bounds! by %lf vs %lf,%lf (%le,%le)\n",
+             oidx, M(oidx), Vout(i, 2), zmin, zmax,
+             Vout(i,2) - zmin, zmax - Vout(i,2));
+      exit(1);
     }
   }
 }

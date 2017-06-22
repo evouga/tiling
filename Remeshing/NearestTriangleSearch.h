@@ -17,19 +17,19 @@ class NearestTriangleSearch{
 		void initializeKDTreeBasedSearchStructure(TriangleMesh * inputMesh,unsigned int maxDepth, unsigned int minNumberOfTriangles);
 		void destroyKDTreeBasedSearchStructure();
 
-		void computeClosestTriangleOfPoint(OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle);
+		void computeClosestTriangleOfPoint(TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle);
 		
 	private:	
 
 		void destroyNode(KDTreeNode * node);
 
-		//void getFarthestAncestorNodeWithPossibleNearestTriangleOfPoint(KDTreeNode * nodeOfSubSpace,KDTreeNode ** farthestAncestorNode,OpenMesh::Vec3f & queryPoint, double minDistanceOfAllTriangleInLeafNode,unsigned int counter);
+		//void getFarthestAncestorNodeWithPossibleNearestTriangleOfPoint(KDTreeNode * nodeOfSubSpace,KDTreeNode ** farthestAncestorNode,TriangleMesh::Point & queryPoint, double minDistanceOfAllTriangleInLeafNode,unsigned int counter);
 
-		void closestTriangleOfPointInAncestorCells(KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,double * minDistance,TriangleMesh::FaceHandle & closestTriangle);
+		void closestTriangleOfPointInAncestorCells(KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,double * minDistance,TriangleMesh::FaceHandle & closestTriangle);
 		
-		void closestTriangleOfPointInDescendantCells(KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle, double minDistanceOfAllTriangleInLeafNode, double * minDistance);
+		void closestTriangleOfPointInDescendantCells(KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle, double minDistanceOfAllTriangleInLeafNode, double * minDistance);
 
-		double closestTriangleOfPointInCell(KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle);
+		double closestTriangleOfPointInCell(KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle);
 
 		void buildKDTreeWithMedianSplit(TriangleMesh * inputMesh,unsigned int maxDepth, unsigned int minNumberOfTriangles);
 
@@ -39,11 +39,11 @@ class NearestTriangleSearch{
 
 		bool terminateKDTreeConstruction(KDTreeNode * nodeOfSubSpace, unsigned int currentKDTreeDepth, unsigned int maxDepth, unsigned int minNumberOfTriangles);
 
-		void computeCellBoundingBox(TriangleMesh * inputMesh,KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & minPoint, OpenMesh::Vec3f & maxPoint); // currently working on
+		void computeCellBoundingBox(TriangleMesh * inputMesh,KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & minPoint, TriangleMesh::Point & maxPoint); // currently working on
 
 		void sortTrianglesIntoChildCells(TriangleMesh * inputMesh,KDTreeNode * nodeOfSubSpace);
 
-		KDTreeNode * findLeafWithQueryPoint(OpenMesh::Vec3f & queryPoint,KDTreeNode * entryNode);
+		KDTreeNode * findLeafWithQueryPoint(TriangleMesh::Point & queryPoint,KDTreeNode * entryNode);
 
 
 		KDTreeNode * kDTreeRootNode;

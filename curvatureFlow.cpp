@@ -163,6 +163,28 @@ void triangulate_boundary(const Eigen::MatrixXd &V,
     F_border.push_back(face);
 }
 
+double getClosestOrigZ(const Eigen::MatrixXd &V, const Eigen::VectorXi &M,
+                       bool up) {
+  bool first = true;
+  double max, min;
+  for (int i = 0; i < V.rows(); ++i) {
+    if (M(i) == GLOBAL::nonoriginal_marker) continue;
+
+    if (first) {
+      max = V(i, 2);
+      min = V(i, 2);
+      first = false;
+      continue;
+    }
+
+    if (V(i, 2) < min) min = V(i, 2);
+    if (V(i, 2) > max) max = V(i, 2);
+  }
+
+  if (up) return max;
+  return min;
+}
+
 void extendVertices(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                     const Eigen::VectorXi &O,
                     Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,

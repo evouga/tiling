@@ -2,15 +2,15 @@
 
 namespace geometry{
 
-double squaredDistancePointToTriangle(	OpenMesh::Vec3f & _point,
-										OpenMesh::Vec3f & _triangleVertexA,
-										OpenMesh::Vec3f & _triangleVertexB,
-										OpenMesh::Vec3f & _triangleVertexC)
+double squaredDistancePointToTriangle(	TriangleMesh::Point & _point,
+										TriangleMesh::Point & _triangleVertexA,
+										TriangleMesh::Point & _triangleVertexB,
+										TriangleMesh::Point & _triangleVertexC)
 {
 
- OpenMesh::Vec3f kDiff = _triangleVertexA - _point;
- OpenMesh::Vec3f kEdge0 = _triangleVertexB - _triangleVertexA;
- OpenMesh::Vec3f kEdge1 = _triangleVertexC - _triangleVertexA;
+  TriangleMesh::Point kDiff = _triangleVertexA - _point;
+  TriangleMesh::Point kEdge0 = _triangleVertexB - _triangleVertexA;
+  TriangleMesh::Point kEdge1 = _triangleVertexC - _triangleVertexA;
  double fA00 = kEdge0.sqrnorm();
  double fA01 = kEdge0 | kEdge1;
  double fA11 = kEdge1.sqrnorm();
@@ -237,15 +237,15 @@ double squaredDistancePointToTriangle(	OpenMesh::Vec3f & _point,
   return fSqrDistance; 
 }
 
-double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
-												OpenMesh::Vec3f & _projectedPoint,
-												OpenMesh::Vec3f & _triangleVertexA,
-												OpenMesh::Vec3f & _triangleVertexB,
-												OpenMesh::Vec3f & _triangleVertexC)
+double squaredDistancePointToTriangle(			TriangleMesh::Point & _point,
+												TriangleMesh::Point & _projectedPoint,
+												TriangleMesh::Point & _triangleVertexA,
+												TriangleMesh::Point & _triangleVertexB,
+												TriangleMesh::Point & _triangleVertexC)
 {
- OpenMesh::Vec3f kDiff = _triangleVertexA - _point;
- OpenMesh::Vec3f kEdge0 = _triangleVertexB - _triangleVertexA;
- OpenMesh::Vec3f kEdge1 = _triangleVertexC - _triangleVertexA;
+  TriangleMesh::Point kDiff = _triangleVertexA - _point;
+  TriangleMesh::Point kEdge0 = _triangleVertexB - _triangleVertexA;
+  TriangleMesh::Point kEdge1 = _triangleVertexC - _triangleVertexA;
  double fA00 = kEdge0.sqrnorm();
  double fA01 = kEdge0 | kEdge1;
  double fA11 = kEdge1.sqrnorm();
@@ -469,22 +469,22 @@ double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
      fSqrDistance = (double)0.0;
   }	
 	
-	_projectedPoint = _triangleVertexA + (float)fS*kEdge0 + (float)fT*kEdge1;
+	_projectedPoint = _triangleVertexA + (TriangleMesh::Scalar)fS*kEdge0 + (TriangleMesh::Scalar)fT*kEdge1;
 	return fSqrDistance;
 }
 
 
-double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
-												OpenMesh::Vec3f & _projectedPoint,
-												OpenMesh::Vec3f & _projectedPointBaryCentricCoordinates,
-												OpenMesh::Vec3f & _triangleVertexA,
-												OpenMesh::Vec3f & _triangleVertexB,
-												OpenMesh::Vec3f & _triangleVertexC
+double squaredDistancePointToTriangle(			TriangleMesh::Point & _point,
+												TriangleMesh::Point & _projectedPoint,
+												TriangleMesh::Point & _projectedPointBaryCentricCoordinates,
+												TriangleMesh::Point & _triangleVertexA,
+												TriangleMesh::Point & _triangleVertexB,
+												TriangleMesh::Point & _triangleVertexC
 												)
 {
- OpenMesh::Vec3f kDiff = _triangleVertexA - _point;
- OpenMesh::Vec3f kEdge0 = _triangleVertexB - _triangleVertexA;
- OpenMesh::Vec3f kEdge1 = _triangleVertexC - _triangleVertexA;
+  TriangleMesh::Point kDiff = _triangleVertexA - _point;
+  TriangleMesh::Point kEdge0 = _triangleVertexB - _triangleVertexA;
+  TriangleMesh::Point kEdge1 = _triangleVertexC - _triangleVertexA;
  double fA00 = kEdge0.sqrnorm();
  double fA01 = kEdge0 | kEdge1;
  double fA11 = kEdge1.sqrnorm();
@@ -708,7 +708,7 @@ double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
      fSqrDistance = (double)0.0;
   }	
 	
-	_projectedPoint = _triangleVertexA + (float)fS*kEdge0 + (float)fT*kEdge1;
+	_projectedPoint = _triangleVertexA + (TriangleMesh::Scalar)fS*kEdge0 + (TriangleMesh::Scalar)fT*kEdge1;
 	
 	_projectedPointBaryCentricCoordinates[0]=1.0-fS-fT;
 	_projectedPointBaryCentricCoordinates[1]=fS;

@@ -47,7 +47,7 @@ void NearestTriangleSearch::destroyNode(KDTreeNode * node){
 }
 
 
-void NearestTriangleSearch::computeClosestTriangleOfPoint(OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle){
+void NearestTriangleSearch::computeClosestTriangleOfPoint(TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle){
 	/*
 	KDTreeNode * leafWithQueryPoint;
 	KDTreeNode * farthestAncestorNode = new KDTreeNode;
@@ -75,7 +75,7 @@ void NearestTriangleSearch::computeClosestTriangleOfPoint(OpenMesh::Vec3f & quer
 	
 }
 /*
-void NearestTriangleSearch::getFarthestAncestorNodeWithPossibleNearestTriangleOfPoint(KDTreeNode * nodeOfSubSpace,KDTreeNode ** farthestAncestorNode,OpenMesh::Vec3f & queryPoint, double minDistanceOfAllTriangleInLeafNode, unsigned int counter){
+void NearestTriangleSearch::getFarthestAncestorNodeWithPossibleNearestTriangleOfPoint(KDTreeNode * nodeOfSubSpace,KDTreeNode ** farthestAncestorNode,TriangleMesh::Point & queryPoint, double minDistanceOfAllTriangleInLeafNode, unsigned int counter){
 	
 	if(nodeOfSubSpace->parent != NULL){
 		if(fabs(nodeOfSubSpace->parent->splittingPlaneCoordinate-queryPoint[nodeOfSubSpace->parent->coordinateAxisOfSplitting])<minDistanceOfAllTriangleInLeafNode){
@@ -95,7 +95,7 @@ void NearestTriangleSearch::getFarthestAncestorNodeWithPossibleNearestTriangleOf
 }
 */
 
-void NearestTriangleSearch::closestTriangleOfPointInAncestorCells(KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,double * minDistance,TriangleMesh::FaceHandle & closestTriangle)
+void NearestTriangleSearch::closestTriangleOfPointInAncestorCells(KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,double * minDistance,TriangleMesh::FaceHandle & closestTriangle)
 {
 	if(nodeOfSubSpace->parent != NULL){
 		if(fabs(nodeOfSubSpace->parent->splittingPlaneCoordinate-queryPoint[nodeOfSubSpace->parent->coordinateAxisOfSplitting])<*minDistance){
@@ -120,7 +120,7 @@ void NearestTriangleSearch::closestTriangleOfPointInAncestorCells(KDTreeNode * n
 
 }
 
-void NearestTriangleSearch::closestTriangleOfPointInDescendantCells(KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle, double minDistanceOfAllTriangleInLeafNode, double * minDistance){
+void NearestTriangleSearch::closestTriangleOfPointInDescendantCells(KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle, double minDistanceOfAllTriangleInLeafNode, double * minDistance){
 
 	if(!nodeOfSubSpace->isLeaf){
 		double minDistanceInLeftCell =  std::numeric_limits<float>::max();
@@ -159,7 +159,7 @@ void NearestTriangleSearch::closestTriangleOfPointInDescendantCells(KDTreeNode *
 	}
 }
 
-double NearestTriangleSearch::closestTriangleOfPointInCell(KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle){
+double NearestTriangleSearch::closestTriangleOfPointInCell(KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & queryPoint,TriangleMesh * inputMesh,TriangleMesh::FaceHandle & closestTriangle){
 	TriangleMesh::ConstFaceVertexIter cfvIt;
 	double minQueryPointTriangleDistance = std::numeric_limits<double>::max();
 	TriangleMesh::FaceHandle nearestTriangleHandle;
@@ -187,7 +187,7 @@ double NearestTriangleSearch::closestTriangleOfPointInCell(KDTreeNode * nodeOfSu
 	return minQueryPointTriangleDistance;
 } 
 
-KDTreeNode * NearestTriangleSearch::findLeafWithQueryPoint(OpenMesh::Vec3f & queryPoint,KDTreeNode * entryNode){
+KDTreeNode * NearestTriangleSearch::findLeafWithQueryPoint(TriangleMesh::Point & queryPoint,KDTreeNode * entryNode){
 	if(!entryNode->isLeaf){
 		
 		enum COORDINATE_AXIS currentCoordinateAxisOfSplitting = entryNode->coordinateAxisOfSplitting;
@@ -242,8 +242,8 @@ void NearestTriangleSearch::subdivideSpace(TriangleMesh * inputMesh,KDTreeNode *
 		nodeOfSubSpace->isLeaf = false;
 		
 		// compute coordinateAxis of splitting
-		OpenMesh::Vec3f cellBoundingBoxMin;
-		OpenMesh::Vec3f cellBoundingBoxMax;
+    TriangleMesh::Point cellBoundingBoxMin;
+    TriangleMesh::Point cellBoundingBoxMax;
 		
 		computeCellBoundingBox(inputMesh,nodeOfSubSpace,cellBoundingBoxMin,cellBoundingBoxMax);
 		double lengthX, lengthY, lengthZ;
@@ -332,12 +332,12 @@ void NearestTriangleSearch::subdivideSpace(TriangleMesh * inputMesh,KDTreeNode *
 
 
 // TODO rename to cell bounding box
-void NearestTriangleSearch::computeCellBoundingBox(TriangleMesh * inputMesh,KDTreeNode * nodeOfSubSpace,OpenMesh::Vec3f & minPoint, OpenMesh::Vec3f & maxPoint){
+void NearestTriangleSearch::computeCellBoundingBox(TriangleMesh * inputMesh,KDTreeNode * nodeOfSubSpace,TriangleMesh::Point & minPoint, TriangleMesh::Point & maxPoint){
 	TriangleMesh::FaceVertexIter fvIt;
-	OpenMesh::Vec3f point0,point1,point2;
+  TriangleMesh::Point point0,point1,point2;
 	
-	OpenMesh::Vec3f currentMinPoint;
-	OpenMesh::Vec3f currentMaxPoint;
+  TriangleMesh::Point currentMinPoint;
+  TriangleMesh::Point currentMaxPoint;
 	
 	currentMinPoint.vectorize( std::numeric_limits< float >::max() );
 	currentMaxPoint.vectorize( - std::numeric_limits< float >::max() );
@@ -368,7 +368,7 @@ void NearestTriangleSearch::computeCellBoundingBox(TriangleMesh * inputMesh,KDTr
 
 void NearestTriangleSearch::sortTrianglesIntoChildCells(TriangleMesh * inputMesh,KDTreeNode * nodeOfSubSpace){
 	TriangleMesh::FaceVertexIter fvIt;
-	OpenMesh::Vec3f point0,point1,point2;
+  TriangleMesh::Point point0,point1,point2;
 
 	double triangleLowerBound=0.0;
 	double triangleUpperBound=0.0;

@@ -925,13 +925,23 @@ void marchingOffsetSurface(
     cout << "See pre_remesh_manifold.off for problems.\n";
     exit(1);
   }
-  if (!Helpers::isMeshOkay(Voff, Foff)) {
+  std::set<int> bad;
+  if (!Helpers::isMeshOkay(Voff, Foff, bad)) {
     cout << __FILE__ << ":" << __LINE__ << ": "
          << "Mesh before remeshing is bad! Go fix your code." << endl;
+    cout << "bad has " << bad.size() << "elements" << endl;
+    printf("Errors are:\n");
+    for (int i : bad) {
+      printf("  %d (marker %d)\n", i, Ooff(i));
+      Ooff(i) = GLOBAL::nonmanifold_marker;
+    }
     Helpers::writeMeshWithMarkers("pre_remesh", Voff, Foff, Ooff);
     cout << "See pre_remesh.off for problems.\n";
     exit(1);
   }
+  Helpers::writeMeshWithMarkers("pre_remesh", Voff, Foff, Ooff);
+  double zmin = Voff.colwise().minCoeff()(2),
+         zmax = Voff.colwise().maxCoeff()(2);
 #endif
 
   Eigen::VectorXi tmp;
@@ -955,6 +965,14 @@ void marchingOffsetSurface(
   //Helpers::collapseShortEdges(Voff, Foff, Ooff, 0.0);
   Helpers::removeUnreferenced(Voff, Foff, Ooff);
 #ifdef DEBUG_MESH
+  double zmin_new = Voff.colwise().minCoeff()(2),
+         zmax_new = Voff.colwise().maxCoeff()(2);
+  if (zmin_new < zmin || zmax_new > zmax) {
+    printf("error: min/max changed! %lf/%lf vs %lf/%lf\n",
+           zmin,zmax, zmin_new,zmax_new);
+    exit(-1);
+  } 
+
   minV = minVertexDist(Voff);
   printf("min distance is %lf\n", minV);
   if (!Helpers::isManifold(Voff, Foff, Ooff, 5)) {
@@ -964,11 +982,16 @@ void marchingOffsetSurface(
     cout << "See post_remesh_manifold.off for problems.\n";
     exit(1);
   }
-  if (!Helpers::isMeshOkay(Voff, Foff, 1e-15)) {
+  if (!Helpers::isMeshOkay(Voff, Foff, bad, 1e-15)) {
     cout << __FILE__ << ":" << __LINE__ << ": "
          << "Mesh after remeshing is bad! Go fix your code." << endl;
-    Helpers::writeMeshWithMarkers("post_remesh", Voff, Foff, Ooff);
     cout << "See post_remesh.off for problems.\n";
+    printf("Errors are:\n");
+    for (int i : bad) {
+      printf("  %d (marker %d)\n", i, Ooff(i));
+      Ooff(i) = GLOBAL::nonmanifold_marker;
+    }
+    Helpers::writeMeshWithMarkers("post_remesh", Voff, Foff, Ooff);
     exit(1);
   }
   printf("End of remeshing\n\n\n");

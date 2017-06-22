@@ -12,9 +12,9 @@ double triangleSurfaceArea(	TriangleMesh::FaceHandle & _face,
 {
 	
 	TriangleMesh::FaceVertexIter fvIt=inputMesh->fv_iter(_face);
-	OpenMesh::Vec3f pointA = inputMesh->point( *fvIt );
-	OpenMesh::Vec3f pointB = inputMesh->point( *(++fvIt) );
-	OpenMesh::Vec3f pointC = inputMesh->point( *(++fvIt) );
+  TriangleMesh::Point pointA = inputMesh->point( *fvIt );
+  TriangleMesh::Point pointB = inputMesh->point( *(++fvIt) );
+  TriangleMesh::Point pointC = inputMesh->point( *(++fvIt) );
 
 	double a = (pointA-pointB).length();
 	double b = (pointB-pointC).length();
@@ -68,9 +68,9 @@ double triangleSurfaceArea(	TriangleMesh::FaceHandle & _face,
 	}
 }
 
-double triangleSurfaceArea(	OpenMesh::Vec3f & pointA,
-							OpenMesh::Vec3f & pointB,
-							OpenMesh::Vec3f & pointC){
+double triangleSurfaceArea(	TriangleMesh::Point & pointA,
+							TriangleMesh::Point & pointB,
+							TriangleMesh::Point & pointC){
 
 	double a = (pointA-pointB).length();
 	double b = (pointB-pointC).length();

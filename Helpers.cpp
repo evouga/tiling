@@ -475,21 +475,19 @@ void extractShell(const Eigen::MatrixXd &V1, const Eigen::MatrixXi &F1,
       M2(J(i)) = M1(i);
   }
 
+#ifdef DEBUG_MESH
   // Also make sure it's manifold.
   Eigen::VectorXi temp = M2;
   if (!isManifold(V2, F2, temp, true)) {
     //extractManifoldPatch(V2, F2, M2);
     printf("ExtractShell is not manifold! View it now.\n");
     viewTriMesh(V2, F2, temp);
+    printf("Now viewing original mesh\n");
     temp = M1;
-    if (isManifold(V1, F1, temp, true)) {
-      printf("Original mesh is manifold.\n");
-    } else {
-      printf("Original mesh is not manifold either.\n");
-    }
     viewTriMesh(V1, F1, temp);
     exit(1);
   }
+#endif
 }
 
 void collapseShortEdges(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::VectorXi &M,

@@ -73,11 +73,13 @@ void combineComponentsIntoMesh(const vector<Component*> &components,
     Eigen::MatrixXd V1 = component->V;
     Eigen::MatrixXi F1 = component->F;
     Eigen::VectorXi O1 = component->M;
-    if (!Helpers::isManifold(V1, F1, O1)) {
-      Eigen::VectorXi temp = O1;
+#ifdef DEBUG_MESH
+    Eigen::VectorXi temp = O1;
+    if (!Helpers::isManifold(V1, F1, temp, true)) {
       printf("Here is the non-manifold mesh:\n");
       Helpers::viewTriMesh(V1, F1, temp);
     }
+#endif
     tileVs.push_back(component->V);
     tileFs.push_back(component->F);
     tileMs.push_back(component->M);
@@ -88,7 +90,6 @@ void combineComponentsIntoMesh(const vector<Component*> &components,
   Eigen::VectorXi tileM;
 
   Helpers::combineMesh(tileVs, tileFs, tileMs, tileV, tileF, tileM);
-  printf("Calling extractShell from %s:%d\n", __FILE__, __LINE__);
   Helpers::extractShell(tileV, tileF, tileM, V, F, O);
 }
 
@@ -101,11 +102,13 @@ double energy(Tile *tile, bool sum_individual=true) {
       const Eigen::MatrixXd &V = component->V;
       const Eigen::MatrixXi &F = component->F;
       const Eigen::VectorXi &O = component->M;
+#ifdef DEBUG_MESH
       Eigen::VectorXi temp = O;
       if (!Helpers::isManifold(V, F, temp, true)) {
         printf("[%s:%d] is not manifold!\n", __FILE__, __LINE__);
         Helpers::viewTriMesh(V, F, temp);
       }
+#endif
 
       Eigen::MatrixXd V_shell, V_biharmonic;
       Eigen::MatrixXi F_shell, F_biharmonic;
@@ -113,7 +116,6 @@ double energy(Tile *tile, bool sum_individual=true) {
       vector<int> new_vertices;
 
       // Make sure to pass in a triangle mesh.
-      printf("Calling extractShell from %s:%d\n", __FILE__, __LINE__);
       Helpers::extractShell(V, F, O, V_shell, F_shell, O_shell);
       score += biharmonic_new(V_shell, F_shell, O_shell,
                               V_biharmonic, F_biharmonic, O_biharmonic,

@@ -9,8 +9,8 @@ namespace dataStructure{
 
 typedef struct KDTreeAxiAlignedBoundingBox_{
 		
-	OpenMesh::Vec3f minCorner;
-	OpenMesh::Vec3f maxCorner;
+  TriangleMesh::Point minCorner;
+  TriangleMesh::Point maxCorner;
 
 }KDTreeAxiAlignedBoundingBox;
 

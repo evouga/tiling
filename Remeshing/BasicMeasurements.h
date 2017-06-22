@@ -5,23 +5,23 @@
 
 namespace geometry{
 
-double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
-												OpenMesh::Vec3f & _triangleVertexA,
-												OpenMesh::Vec3f & _triangleVertexB,
-												OpenMesh::Vec3f & _triangleVertexC);
+double squaredDistancePointToTriangle(			TriangleMesh::Point & _point,
+												TriangleMesh::Point & _triangleVertexA,
+												TriangleMesh::Point & _triangleVertexB,
+												TriangleMesh::Point & _triangleVertexC);
 												
-double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
-												OpenMesh::Vec3f & _projectedPoint,
-												OpenMesh::Vec3f & _triangleVertexA,
-												OpenMesh::Vec3f & _triangleVertexB,
-												OpenMesh::Vec3f & _triangleVertexC);
+double squaredDistancePointToTriangle(			TriangleMesh::Point & _point,
+												TriangleMesh::Point & _projectedPoint,
+												TriangleMesh::Point & _triangleVertexA,
+												TriangleMesh::Point & _triangleVertexB,
+												TriangleMesh::Point & _triangleVertexC);
 												
-double squaredDistancePointToTriangle(			OpenMesh::Vec3f & _point,
-												OpenMesh::Vec3f & _projectedPoint,
-												OpenMesh::Vec3f & _projectedPointBaryCentricCoordinates,
-												OpenMesh::Vec3f & _triangleVertexA,
-												OpenMesh::Vec3f & _triangleVertexB,
-												OpenMesh::Vec3f & _triangleVertexC);
+double squaredDistancePointToTriangle(			TriangleMesh::Point & _point,
+												TriangleMesh::Point & _projectedPoint,
+												TriangleMesh::Point & _projectedPointBaryCentricCoordinates,
+												TriangleMesh::Point & _triangleVertexA,
+												TriangleMesh::Point & _triangleVertexB,
+												TriangleMesh::Point & _triangleVertexC);
 												
 double signedNormalAngleOfAdjacentTriangles(	TriangleMesh::HalfedgeHandle & _he,
 												TriangleMesh::FaceHandle & _f1,
@@ -31,14 +31,14 @@ double signedNormalAngleOfAdjacentTriangles(	TriangleMesh::HalfedgeHandle & _he,
 double triangleSurfaceArea(						TriangleMesh::FaceHandle & _f1,
 												TriangleMesh * inputMesh);
 
-double triangleSurfaceArea(						OpenMesh::Vec3f & pointA,
-												OpenMesh::Vec3f & pointB,
-												OpenMesh::Vec3f & pointC);
+double triangleSurfaceArea(						TriangleMesh::Point & pointA,
+												TriangleMesh::Point & pointB,
+												TriangleMesh::Point & pointC);
 							
 
-double triangleAngleBAC(						OpenMesh::Vec3f & _pointB, 
-												OpenMesh::Vec3f & _pointA,
-												OpenMesh::Vec3f & _pointC);
+double triangleAngleBAC(						TriangleMesh::Point & _pointB, 
+												TriangleMesh::Point & _pointA,
+												TriangleMesh::Point & _pointC);
 
 }
 

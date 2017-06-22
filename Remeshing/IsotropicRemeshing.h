@@ -32,9 +32,13 @@ class IsotropicRemeshing
 	
 	void remesh(TriangleMesh * _mesh,unsigned int _iterations, 
               int types = ISOTROPIC_REMESHING_TYPES::ALL);
+  void setBoundingBox(const TriangleMesh::Point &max,
+                      const TriangleMesh::Point &min);
 	
 	protected:
-		
+	bool _bbSet;
+  TriangleMesh::Point _maxBB, _minBB;
+
 	bool isNAN(double num);
 	void removeNANVertices(TriangleMesh * _mesh);
 	void splitLongEdges(TriangleMesh * _mesh);	

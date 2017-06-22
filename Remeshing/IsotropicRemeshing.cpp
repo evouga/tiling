@@ -20,6 +20,7 @@ using std::endl;
 
 IsotropicRemeshing::IsotropicRemeshing(double _targetLength)
 {
+  _bbSet = false;
 	targetLength = _targetLength;
 	lowerBoundLength = 4.0/5.0 * targetLength;
 	higherBoundLength = 4.0/3.0 * targetLength;
@@ -29,6 +30,13 @@ IsotropicRemeshing::IsotropicRemeshing(double _targetLength)
 IsotropicRemeshing::~IsotropicRemeshing()
 {
 
+}
+
+void IsotropicRemeshing::setBoundingBox(
+    const TriangleMesh::Point &max, const TriangleMesh::Point &min) {
+  _maxBB = max;
+  _minBB = min;
+  _bbSet = true;
 }
 
 void IsotropicRemeshing::remesh(TriangleMesh * _mesh,unsigned int _iterations,
@@ -177,8 +185,8 @@ void IsotropicRemeshing::collapseShortEdges(TriangleMesh * _mesh)
 					
 					for(;vvIt.is_valid();++vvIt)
 					{
-						OpenMesh::Vec3f pointA = _mesh->point(v1);
-						OpenMesh::Vec3f pointB = _mesh->point( *vvIt );
+            TriangleMesh::Point pointA = _mesh->point(v1);
+            TriangleMesh::Point pointB = _mesh->point( *vvIt );
 						if((pointA-pointB).length() >higherBoundLength)
 						{
 							hcol01 = false;
@@ -187,8 +195,8 @@ void IsotropicRemeshing::collapseShortEdges(TriangleMesh * _mesh)
 					vvIt=_mesh->vv_iter(v1);
 					for( ; vvIt.is_valid(); ++vvIt )
 					{
-						OpenMesh::Vec3f pointA = _mesh->point(v0);
-						OpenMesh::Vec3f pointB = _mesh->point( *vvIt );
+            TriangleMesh::Point pointA = _mesh->point(v0);
+            TriangleMesh::Point pointB = _mesh->point( *vvIt );
 						if((pointA-pointB).length()>higherBoundLength)
 						{
 							hcol10 = false;
@@ -277,10 +285,17 @@ void IsotropicRemeshing::equalizeValences(TriangleMesh * _mesh)
 			  hh = _mesh->halfedge_handle( *e_it, 0 );
 			  v0 = _mesh->to_vertex_handle(hh);
 			  v2 = _mesh->to_vertex_handle(_mesh->next_halfedge_handle(hh));
+        TriangleMesh::EHandle e1 = _mesh->edge_handle(_mesh->next_halfedge_handle(hh));
+        TriangleMesh::EHandle e2 = _mesh->edge_handle(_mesh->prev_halfedge_handle(hh));
 			  //hh = _mesh->halfedge_handle(e_it, 1);
 			  hh = _mesh->opposite_halfedge_handle(hh);
 			  v1 = _mesh->to_vertex_handle(hh);
 			  v3 = _mesh->to_vertex_handle(_mesh->next_halfedge_handle(hh));
+        TriangleMesh::EHandle e3 = _mesh->edge_handle(_mesh->prev_halfedge_handle(hh));
+        TriangleMesh::EHandle e4 = _mesh->edge_handle(_mesh->next_halfedge_handle(hh));
+        // Check and make sure the edges are not protected.
+        if (_mesh->data(e1).isProtected() && _mesh->data(e3).isProtected()) continue;
+        if (_mesh->data(e2).isProtected() && _mesh->data(e4).isProtected()) continue;
 
 			  val0 = _mesh->valence(v0);
 			  val1 = _mesh->valence(v1);
@@ -381,14 +396,14 @@ void IsotropicRemeshing::projectToSurface(TriangleMesh * _mesh)
 		if( !_mesh->is_boundary( *vIt ) )
 		{
 			TriangleMesh::FaceHandle closestTriangleOnBackupMesh;
-			OpenMesh::Vec3f pointOnMesh;
+      TriangleMesh::Point pointOnMesh;
 			pointOnMesh = _mesh->point( *vIt );
 			assert(!isNAN(pointOnMesh[0]));
 			assert(!isNAN(pointOnMesh[1]));
 			assert(!isNAN(pointOnMesh[2]));
 			triangleKDTree->computeClosestTriangleOfPoint(pointOnMesh,&meshBackup,closestTriangleOnBackupMesh);
 			// project point of mesh to closest triangle on backup mesh
-			OpenMesh::Vec3f pointOnBackupMeshFromMesh;
+      TriangleMesh::Point pointOnBackupMeshFromMesh;
 			TriangleMesh::FaceVertexIter fvIt;
 			
 			fvIt = meshBackup.fv_iter(closestTriangleOnBackupMesh);
@@ -397,9 +412,9 @@ void IsotropicRemeshing::projectToSurface(TriangleMesh * _mesh)
 			if(!closestTriangleOnBackupMesh.is_valid())
 				continue;
 			
-			OpenMesh::Vec3f pointA = meshBackup.point( *fvIt );
-			OpenMesh::Vec3f pointB = meshBackup.point( *(++fvIt) );
-			OpenMesh::Vec3f pointC = meshBackup.point( *(++fvIt) );
+      TriangleMesh::Point pointA = meshBackup.point( *fvIt );
+      TriangleMesh::Point pointB = meshBackup.point( *(++fvIt) );
+      TriangleMesh::Point pointC = meshBackup.point( *(++fvIt) );
 			
 			
 			geometry::squaredDistancePointToTriangle(	pointOnMesh,
@@ -471,8 +486,20 @@ void IsotropicRemeshing::areaEqualization(TriangleMesh * _mesh)
 			
 		for (v_it=_mesh->vertices_begin(); v_it!=v_end; ++v_it)
       // If it's not protected, update the position.
-			if( !_mesh->is_boundary( *v_it ) && !_mesh->data(*v_it).isProtected() )
+			if( !_mesh->is_boundary( *v_it ) && !_mesh->data(*v_it).isProtected() ) {
 				_mesh->point( *v_it ) += _mesh->property( update, *v_it );
+        // Make sure it doesn't move outside the bounding box.
+        if (_bbSet) {
+          for (int i = 0; i < 3; ++i) {
+            if (_mesh->point( *v_it )[i] > _maxBB[i]) {
+              _mesh->point( *v_it )[i] = _maxBB[i];
+            }
+            if (_mesh->point( *v_it )[i] < _minBB[i]) {
+              _mesh->point( *v_it )[i] = _minBB[i];
+            }
+          }
+        }
+      }
 	  
 	}
 }
