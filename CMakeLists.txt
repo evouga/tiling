@@ -90,10 +90,32 @@ if (MESH_DEBUG)
 endif(MESH_DEBUG)
 
 ######################################################################
+
+######################################################################
+# Dlib
+######################################################################
+find_package(dlib REQUIRED)
+if (NOT DLIB_FOUND)
+  message(FATAL_ERROR "dlib not found --- You can download it from http://dlib.net/")
+endif()
+### meshfix information ###
+message("dlib includes: ${DLIB_INCLUDE_DIR}")
+message("dlib libraries: ${DLIB_LIBRARY}")
+######################################################################
+
 ### Prepare the build environment
 include_directories(${LIBIGL_INCLUDE_DIRS})
 include_directories(${MESHFIX_INCLUDE_DIRS})
+include_directorieS(${DLIB_INCLUDE_DIR})
 add_definitions(${LIBIGL_DEFINITIONS})
+
+SET(ALL_LIBRARIES
+  ${DLIB_LIBRARY}
+  ${LIBIGL_EXTRA_LIBRARIES} 
+  ${LIBIGL_LIBRARIES} 
+  ${MESHFIX_LIBRARIES} 
+  Remeshing
+  )
 
 ### Add your project files
 SET(BINARY_FILES ${CMAKE_CURRENT_LIST_DIR}/main.cpp
@@ -107,20 +129,27 @@ FILE(GLOB SRCFILES *.cpp)
 LIST(REMOVE_ITEM SRCFILES ${BINARY_FILES})
 message("Project sources are: ${SRCFILES}")
 
-add_executable(${PROJECT_NAME}_bin main.cpp ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
-target_link_libraries(${PROJECT_NAME}_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+#add_executable(${PROJECT_NAME}_bin main.cpp ${SRCFILES} ${LIBIGL_EXTRA_SOURCES})
+#target_link_libraries(${PROJECT_NAME}_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
-add_executable(test_harmonic_bin test_harmonic.cpp curvatureFlow.cpp Helpers.cpp ${LIBIGL_EXTRA_SOURCES})
-target_link_libraries(test_harmonic_bin ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+add_executable(test_harmonic_bin 
+  Helpers.cpp 
+  Minimization.cpp
+  curvatureFlow.cpp 
+  test_harmonic.cpp 
+  ${LIBIGL_EXTRA_SOURCES})
+target_link_libraries(test_harmonic_bin ${ALL_LIBRARIES})
 
-add_executable(test_icoso_tile icoso_tile.cpp  ${LIBIGL_EXTRA_SOURCES})
-target_link_libraries(test_icoso_tile ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
+add_executable(test_icoso_tile 
+  icoso_tile.cpp
+  ${LIBIGL_EXTRA_SOURCES})
+target_link_libraries(test_icoso_tile 
+  ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES})
 
 # Dynamic programming for correct topologies.
 add_executable(tiler_main tiler_main.cpp ${SRCFILES})
 target_link_libraries(tiler_main
-  ${MESHFIX_LIBRARIES} ${LIBIGL_LIBRARIES} ${LIBIGL_EXTRA_LIBRARIES}
-  Remeshing)
+  ${ALL_LIBRARIES})
 
 # Debugging runner for tiler_main (enter in tile stacks and check if valid).
 # From the build directory -

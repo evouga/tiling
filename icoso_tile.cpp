@@ -4,12 +4,12 @@
 #include <igl/remove_duplicates.h>
 #include <igl/writeOFF.h>
 
-// Pseudocode copied from http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
+// Pseudocode borrowed from http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
 //
 
+#define EPS 1e-6
 
 struct cmpVectors {
-  double EPS = 1e-8;
   bool operator()(const std::vector<double> &a, const std::vector<double> &b) const {
     if (a[0] != b[0]) return a[0] < b[0];
     if (a[1] != b[1]) return a[1] < b[1];
@@ -123,10 +123,10 @@ void refine(int k,
 // Will return 1 if v1 < 0 < v2, 2 if v2 < 0 < v1, 0 otherwise.
 int sameSign(const std::vector<double> &v1,
              const std::vector<double> &v2) {
-  if (v1[0] < 0 && v2[0] > 0) {
+  if (v1[0] < -EPS && v2[0] > EPS) {
     return 1;
   }
-  if (v1[0] > 0 && v2[0] < 0) {
+  if (v1[0] > EPS && v2[0] < -EPS) {
     return 2;
   }
 
@@ -139,6 +139,7 @@ void finish(std::vector<std::vector<double> > &V,
 
   std::vector<std::vector<int> > new_F;
   for (const auto& f : F) {
+    bool has_split = false;
     for (int j = 0; j < 3; ++j) {
       int idx0 = f[j];
       int idx1 = f[(j + 1) % 3];
@@ -150,13 +151,15 @@ void finish(std::vector<std::vector<double> > &V,
         // Add two new faces. Clockwise.
         new_F.push_back({idx0, newp, idx2});
         new_F.push_back({newp, idx1, idx2});
+        has_split = true;
       }
     }
+    if (!has_split) {
+      new_F.push_back(f);
+    }
   }
-  // Add all new faces to F.
-  for (const auto& f : new_F) {
-    F.push_back(f);
-  }
+
+  F = new_F;
 }
 
 void vec_to_Eigen(const std::vector<std::vector<double> > &V,
@@ -183,10 +186,21 @@ void vec_to_Eigen(const std::vector<std::vector<double> > &V,
 
   //printf("  checking for duplicate points...\n");
   // Map to unique vertices (not used)
-  //Eigen::VectorXi toUnique;
-  //igl::remove_duplicates(tV, tF, eV, eF, toUnique, 1e-5);
-  eV = tV;
-  eF = tF;
+  Eigen::VectorXi toUnique;
+  igl::remove_duplicates(tV, tF, eV, eF, toUnique, EPS);
+  printf("Removed %ld points\n", tV.rows() - eV.rows());
+  //eV = tV;
+  //eF = tF;
+  //
+  for (int i = 0; i < eF.rows(); ++i) {
+    for (int j = 0; j < 3; ++j) {
+      int nextid = (j + 1) % 3;
+      if (eF(i, j) == eF(i, nextid)) {
+        printf("Error: face %d has same at id %d,%d\n",
+               i, j, nextid);
+      }
+    }
+  }
 }
 
 
@@ -224,6 +238,7 @@ int main(int argc, char* argv[]) {
 
   printf("Done! Converting to Eigen and printing out\n");
   vec_to_Eigen(V_v, F_v, V, F);
+
   igl::writeOFF(out_f, V, F);
   printf("Finshed. See %s for output\n", out_f);
 }

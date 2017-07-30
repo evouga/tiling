@@ -5,6 +5,7 @@
 #include "curvatureFlow.h"
 #include "glob_defs.h"
 #include "marching_tets.h"
+#include "Minimization.h"
 
 //#include "meshfix.h"
 
@@ -312,7 +313,7 @@ void set_viewer_with_color(igl::viewer::Viewer &viewer,
 }
 
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                 const Eigen::VectorXi &O) {
+                 const Eigen::VectorXi &O, bool extend) {
   igl::viewer::Viewer viewer;
 
   Eigen::MatrixXd V_biharmonic = V;
@@ -322,6 +323,10 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   vector<int> new_vertices;
 
   int times_called = 0;
+  if (!extend) {
+    times_called = 1;
+    igl::cotmatrix(V_biharmonic, F_biharmonic, L);
+  }
 
   viewer.callback_key_down = [&](igl::viewer::Viewer& viewer,
                                  unsigned char key, int modifier) {
@@ -353,14 +358,14 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
 
       times_called++;
-    }
-    else if (key == 'R') {
+    } else if (key == 'R') {
       printf("Resetting mesh.\n");
       V_biharmonic = V;
       F_biharmonic = F;
       O_biharmonic = O;
 
-      times_called = 0;
+      times_called = extend ? 0 : 1;
+
       set_viewer(viewer, V_biharmonic, F_biharmonic, O_biharmonic);
     } else if (key == 'L') {
       printf("Recomputing Laplacian\n");
@@ -393,6 +398,34 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       Eigen::VectorXi O_unused(W.rows());
       set_viewer(viewer, W, G, O_unused);
       */
+    } else if (key == 'M') {
+      Eigen::MatrixXd V_next;
+      Eigen::MatrixXi F_next;
+      Eigen::VectorXi M_next;
+
+      double en;
+      if (extend) {
+        vector<int> new_vertices;
+        en = biharmonic_new(V, F, O,
+                            V_next, F_next, M_next, &new_vertices,
+                            true);
+      } else {
+        // Don't touch the original vertices.
+        vector<int> new_vertices;
+        for (int i = 0; i < O_biharmonic.rows(); ++i) {
+          if (O_biharmonic(i) != GLOBAL::nonoriginal_marker) {
+            new_vertices.push_back(i);
+          }
+        }
+        printf("Number of new vertices is %ld\n", new_vertices.size());
+        en = minimize(V_biharmonic, F_biharmonic, &new_vertices, V_next);
+        F_next = F_biharmonic;
+        M_next = O_biharmonic;
+      }
+      printf("Finished minimization: %lf\n", en);
+      set_viewer(viewer, V_next, F_next, M_next);
+      V_biharmonic = V_next;
+      F_biharmonic = F_next;
     }
 
     return true;
@@ -694,7 +727,7 @@ void writeMeshWithMarkers(const char* fn,
   for (int i = 0; i < M.rows(); ++i)
     fprintf(of, "%d\n", M(i));
   fclose(of);
-
+  printf("Just wrote to %s.off and %s_orig.txt\n", fn, fn);
   delete[] fn_off;
 }
 

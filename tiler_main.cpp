@@ -149,7 +149,6 @@ void viewTile(Tile *tile, int num_tiles=0, bool save=false) {
 
   printf("calling combineComponents from %s:%d\n", __FILE__, __LINE__);
   combineComponentsIntoMesh(getTileComponents(tile, num_tiles), V, F, M);
-  Helpers::viewTriMesh(V, F, M);
 
   if (save) {
     igl::writeOFF("tile.off", V, F);
@@ -159,7 +158,9 @@ void viewTile(Tile *tile, int num_tiles=0, bool save=false) {
     for (int i = 0; i < M.rows(); ++i)
       fprintf(of, "%d\n", M(i));
     fclose(of);
+    printf("Saved to tile.off and tile_orig.txt\n");
   }
+  Helpers::viewTriMesh(V, F, M);
 }
 
 map<set<int>, ConnectedComponent> getHeatFlowValidComponents(SliceStack &ss,
@@ -245,7 +246,7 @@ int main(int argc, char *argv[]) {
     // View all the tiles first.
     for (Tile *tile : current_level_tiles) {
       cout << "Energy: " << energy(tile) << endl;
-      //viewTile(tile, 0);
+      //viewTile(tile, 0, true);
     }
 
     // Pick the best of each connectivity.
@@ -266,9 +267,9 @@ int main(int argc, char *argv[]) {
         double e2 = energy(best_tiles[tile_id]);
 
         printf("First Score: %lf (vs %lf)\n", e1, e2);
-        viewTile(tile, 1);
+        viewTile(tile, 1, true);
         printf("Second Score: %lf\n", e2);
-        viewTile(best_tiles[tile_id], 1);
+        viewTile(best_tiles[tile_id], 1, true);
 
         // Purge the loser.
         if (e1 < e2) {

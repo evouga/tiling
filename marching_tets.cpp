@@ -15,7 +15,6 @@
 #include <Eigen/Core>
 
 #include <igl/bfs_orient.h>
-#include <igl/collapse_small_triangles.h>
 #include <igl/remove_unreferenced.h>
 #include <igl/orientable_patches.h>
 #include <igl/orient_outward.h>

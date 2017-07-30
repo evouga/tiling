@@ -151,14 +151,14 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-  printf("Viewing before:\n");
-  Helpers::viewTriMesh(V, F, C);
+  printf("Viewing before: %ld %ld %ld\n", V.rows(), F.rows(), C.rows());
+  Helpers::viewTriMesh(V, F, C, false);
 
   // Let's make sure it's manifold.
   Helpers::extractManifoldPatch(V, F, C, true);
 
   printf("Viewing after:\n");
-  Helpers::viewTriMesh(V, F, C);
+  Helpers::viewTriMesh(V, F, C, false);
 
   //biharmonic_view(V, F, C, Vc, true);
   double score = biharmonic_new(V, F, C, Vc, Fc, Cc);

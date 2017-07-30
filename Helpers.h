@@ -35,7 +35,7 @@ void triangulate(const Eigen::MatrixXd &P, const Eigen::MatrixXi &E,
                  Eigen::MatrixXd &V, Eigen::MatrixXi &F);
 
 void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
-                 const Eigen::VectorXi &O);
+                 const Eigen::VectorXi &O, bool extend=true);
 
 void offsetViewer(const Eigen::MatrixXd &TV, const Eigen::MatrixXi &TT,
                   const Eigen::VectorXd &VH);

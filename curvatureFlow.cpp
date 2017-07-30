@@ -22,6 +22,7 @@
 
 #include "glob_defs.h"
 #include "Helpers.h"
+#include "Minimization.h"
 
 static constexpr double gStoppingCriteria = 0.0;
 
@@ -363,10 +364,12 @@ bool igl_harmonic_single(const Eigen::SparseMatrix<double> &Q,
   return min_quad_with_fixed_solve(data, B, V, Eigen::VectorXd(), W);
 }
 
+} // namespace
+
 // \int a^2 + b^2 dA.
 double biharmonic_energy(const Eigen::MatrixXd &V,
                          const Eigen::MatrixXi &F,
-                         const vector<int> *to_ignore=NULL) {
+                         const vector<int> *to_ignore) {
   double geodesic = geodesic_curvature(V, F, to_ignore);
 
   // Compute mean curvature.
@@ -392,12 +395,11 @@ double biharmonic_energy(const Eigen::MatrixXd &V,
   return 4.0 * mean_squared - 2.0 * geodesic;
 }
 
-} // namespace
-
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &V_new, Eigen::MatrixXi &F_new,
-                      Eigen::VectorXi &O_new, vector<int> *new_vertices) {
+                      Eigen::VectorXi &O_new, vector<int> *new_vertices,
+                      bool do_min) {
 #ifdef DEBUG_MESH
   if (!Helpers::isMeshOkay(V, F)) {
     cout << __LINE__ << endl;
@@ -467,7 +469,17 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     cout << __LINE__ << endl;
     cout << "Biharmonic mesh is not okay." << endl;
   }
+  Helpers::writeMeshWithMarkers("extended_bh_mesh", V_new, F_new, O_new);
 #endif
+
+  // Finished with all the prep work; now do the minimization.
+  if (do_min) {
+    // Return without doung the biharmonic.
+    printf("Before minimization, the energy is %lf\n",
+           biharmonic_energy(V_new, F_new, new_vertices));
+    Eigen::MatrixXd V_prev = V_new;
+    return minimize(V_prev, F_new, new_vertices, V_new);
+  }
 
   // Decapitate the caps.
   return biharmonic_energy(V_new, F_new, new_vertices);

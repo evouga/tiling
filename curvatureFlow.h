@@ -16,7 +16,8 @@ void computeCurvatureFlow(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &Vc, Eigen::MatrixXi &Fc,
-                      Eigen::VectorXi &Mc, std::vector<int> *new_vertices=NULL);
+                      Eigen::VectorXi &Mc, std::vector<int> *new_vertices=NULL,
+                      bool do_min = false);
 
 // Given some input mesh V,F, produce an output Vc
 // Also includes a flag to remove any interior "original" markers, so the
@@ -54,6 +55,18 @@ void biharmonic_view(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
 Eigen::VectorXd biharmonic_energy_per_vertex(const Eigen::MatrixXd &V,
                                              const Eigen::MatrixXi &F,
                                              const std::vector<int> &to_ignore);
+
+// Gives the total biharmonic energy of the system, which includes geodesic
+// curvature. Computed as:
+//
+//   \int a^2 + b^2 dA.
+// 
+// or
+//   4.0 * mean_squared - 2.0 * geodesic;
+//
+double biharmonic_energy(const Eigen::MatrixXd &V,
+                         const Eigen::MatrixXi &F,
+                         const std::vector<int> *to_ignore=NULL);
 
 double geodesic_curvature(const Eigen::MatrixXd &V,
                           const Eigen::MatrixXi &F,
