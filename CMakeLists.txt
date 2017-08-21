@@ -136,6 +136,7 @@ add_executable(test_harmonic_bin
   Helpers.cpp 
   Minimization.cpp
   curvatureFlow.cpp 
+  decompose_L.cpp
   test_harmonic.cpp 
   ${LIBIGL_EXTRA_SOURCES})
 target_link_libraries(test_harmonic_bin ${ALL_LIBRARIES})

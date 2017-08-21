@@ -10,6 +10,7 @@
 #include <igl/per_face_normals.h>
 
 #include "curvatureFlow.h"
+#include "decompose_L.h"
 
 // In dlib, the general purpose solvers optimize functions that take a column
 // vector as input and return a double.  So here we make a typedef for a
@@ -63,7 +64,7 @@ class test_function_deriv {
     }
     Eigen::SparseMatrix<double> L, M, Minv;
     igl::cotmatrix(V,_Fo, L);
-    igl::massmatrix(V,_Fo, igl::MASSMATRIX_TYPE_DEFAULT, M);
+    igl::massmatrix(V,_Fo, igl::MASSMATRIX_TYPE_BARYCENTRIC, M);
     for (int i = 0 ; i < V.rows(); ++i) {
       if (!_movable(i)) 
         M.coeffRef(i, i) = std::numeric_limits<double>::infinity();
@@ -71,9 +72,32 @@ class test_function_deriv {
     igl::invert_diag(M, Minv);
 
     // Get each derivative separately, then add them all up.
-    Eigen::MatrixXd dv = deriv_dL(V,L,Minv) + deriv_dV(V,L,Minv) 
-        + deriv_dM(V,_Fo,L,Minv) + deriv_dTheta(V,L,Minv);
+    auto dL = deriv_dL(V,L,Minv),
+         dV = deriv_dV(V,L,Minv),
+         dM = deriv_dM(V,_Fo,L,Minv),
+         dTh= deriv_dTheta(V,L,Minv);
+    //Eigen::MatrixXd dv = dL + dV + dM + dTh;
+    // TESTING TESTING just set to dM
+    Eigen::MatrixXd dv = solo_dM(V,_Fo,L,Minv);
 
+    /*
+    fprintf(stderr, "Just about to decompose L...\n");
+    Eigen::SparseMatrix<double> D;
+    Eigen::SparseMatrix<double> star;
+    decompose_L(V,_Fo, D,star);
+    // VxE * ExE * ExV
+    Eigen::MatrixXd decL = D.transpose() * star * D;
+
+    int N = dv.rows();
+    Eigen::MatrixXd together(N, 5*3);
+    together.block(0,0, N,3) = deriv_dL(V,L,Minv);
+    together.block(0,3, N,3) = deriv_dV(V,L,Minv);
+    together.block(0,6, N,3) = deriv_dM(V,_Fo,L,Minv);
+    together.block(0,9, N,3) = deriv_dTheta(V,L,Minv);
+    together.block(0,12, N,3) = dv;
+    std::cout << "All derivs are:\n"
+         << together << std::endl;
+         */
 
     // Convert them back into single-column format.
     mov_idx = 0;
@@ -109,6 +133,67 @@ class test_function_deriv {
     return  4 * (L.transpose() * Mi * L * V).transpose();
   }
 
+  Eigen::MatrixXd mat_cp(const Eigen::RowVector3d &v) const {
+    Eigen::MatrixXd v_x(3, 3);
+    v_x << 0, -v(2), v(1),
+           v(2), 0, -v(0),
+           -v(1), v(0), 0;
+    return v_x;
+  }
+
+  // Derivative of mass matrix (sanity check).
+  const Eigen::MatrixXd solo_dM(
+      const Eigen::MatrixXd &V,
+      const Eigen::MatrixXi &F,
+      const Eigen::SparseMatrix<double> &L,
+      const Eigen::SparseMatrix<double> &Mi) const {
+    Eigen::MatrixXd ret(V.rows(), 3);
+    ret.setZero();
+    
+    // Need to create mapping of vertex->face
+    std::vector<std::vector<int> > v2face;
+    v2face.resize(V.rows());
+
+    for (int i = 0; i < F.rows(); ++i) {
+      for (int j = 0; j < 3; ++j) {
+        v2face[F(i, j)].push_back(i);
+      }
+    }
+
+    // Also precompute face normals.
+    Eigen::MatrixXd n;
+    igl::per_face_normals(V,F, n);
+    for (int i = 0; i < V.rows(); ++i) {
+      Eigen::RowVector3d dMii;
+      dMii << 0, 0, 0;
+      // Look at each face that contains i
+      for (int fi : v2face[i]) {
+        const auto &f = F.row(fi);
+
+        // Then, look at the other two vertices attached to this face.
+        // Compute next and prev vertices.
+        int next, prev;
+        if (i == f(0)) {
+          prev = f(2); next = f(1); 
+        } else if (i == f(1)) {
+          prev = f(0); next = f(2); 
+        } else { // i == f(2)
+          prev = f(1); next = f(0); 
+        }
+
+        // Then compute the multiplier.
+        dMii += n.row(fi).transpose() * 
+            ( mat_cp(V.row(i) - V.row(prev)) - 
+              mat_cp(V.row(i) - V.row(next)) );
+      }
+
+      ret.row(i) = dMii;
+    }
+
+    return 1. / 6. * ret;
+
+  }
+
   // The contribution from the area to the gradient $\nabla_{v_k} E$ is
   // thus:
   //    $$\frac{1}{3}\sum_{f\supset v_k} 
@@ -118,7 +203,7 @@ class test_function_deriv {
       const Eigen::MatrixXd &V,
       const Eigen::MatrixXi &F,
       const Eigen::SparseMatrix<double> &L,
-      const Eigen::SparseMatrix<double> &Mi) const {
+      const Eigen::SparseMatrix<double> &Mi, bool solo_dv = false) const {
     // Need to create mapping of vertex->face
     std::vector<std::vector<int> > v2face;
     v2face.resize(V.rows());
@@ -254,6 +339,12 @@ class test_function {
 
     Eigen::MatrixXd Vt = getFinalVerts(arg);
     double en = biharmonic_energy(Vt, _Fo, _to_ignore);
+
+    Eigen::SparseMatrix<double> M;
+    igl::massmatrix(Vt,_Fo, igl::MASSMATRIX_TYPE_BARYCENTRIC, M);
+    double ret =  M.diagonal().sum();
+    return ret;
+
     //printf("Inside function, value is %lf\n", en);
 
     // Return the biharmonic energy of the two.
@@ -305,11 +396,14 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   printf("Created starting point, energy is %lf\n", tf(start));
   tf.print(start);
   printf("Number of dimensions is %ld\n", start.size());
-  auto approx_deriv = dlib::derivative(tf)(start);
   auto ours = tf_dv(start);
+  auto approx_deriv = dlib::derivative(tf)(start);
   std::cout << "Difference between analytic derivative and numerical approximation of derivative: "
             << length(approx_deriv - ours) << std::endl;
-  std::cout << approx_deriv << "\nAnd ours:\n" << ours << std::endl;
+  for (int i = 0; i < approx_deriv.size(); ++i) {
+    printf("%c%9.6lf %9.6lf\n", i % 3 == 0 ? '*' : ' ', approx_deriv(i), ours(i));
+  }
+  //std::cout << approx_deriv << "\nAnd ours:\n" << ours << std::endl;
 
   find_min_using_approximate_derivatives(
       //dlib::lbfgs_search_strategy(100),
@@ -317,6 +411,11 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       dlib::objective_delta_stop_strategy(1e-1).be_verbose(),
       tf, start, -1);
   printf("Finished approximate derivatives\n");
+  approx_deriv = dlib::derivative(tf)(start);
+  ours = tf_dv(start);
+  for (int i = 0; i < approx_deriv.size(); ++i) {
+    printf("%c%9.6lf %9.6lf\n", i % 3 == 0 ? '*' : ' ', approx_deriv(i), ours(i));
+  }
 
   minV = tf.getFinalVerts(start);
   printf("got final value (energy is %lf\n", tf(start));
