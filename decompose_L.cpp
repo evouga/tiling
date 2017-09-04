@@ -6,9 +6,8 @@
 
 void decompose_L(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  Eigen::SparseMatrix<double> &D, Eigen::SparseMatrix<double> &star) {
-  fprintf(stderr, "Starting function...\n");
   // Construct D
-  D.resize(V.rows(), V.rows());
+  D.resize(F.rows() * 3, V.rows());
   //          # edges   # non-zeros per edge   
   D.reserve(Eigen::VectorXi::Constant(V.rows(), 2));
   //D.reserve(F.rows()*3 * 2);
@@ -21,7 +20,6 @@ void decompose_L(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     }
   }
 
-  fprintf(stderr, "Finished with D construction\n");
   // Construct star from cot_entries.
   Eigen::MatrixXd cot_entries;
   // cot_entries is #Fx3 where each row corresponds to edge:
@@ -37,6 +35,6 @@ void decompose_L(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       star.coeffRef(e, e) -= cot_entries(i, (j + 2) % 3);
     }
   }
-  fprintf(stderr, "D is %ld,%ld and star is %ld,%ld\nFinished with matrix\n",
-          D.rows(), D.cols(), star.rows(), star.cols());
+  //fprintf(stderr, "D is %ld,%ld and star is %ld,%ld\nFinished with matrix\n",
+  //        D.rows(), D.cols(), star.rows(), star.cols());
 }

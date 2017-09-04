@@ -5,6 +5,7 @@
 #include <dlib/optimization.h>
 
 #include <igl/cotmatrix.h>
+#include <igl/doublearea.h>
 #include <igl/invert_diag.h>
 #include <igl/massmatrix.h>
 #include <igl/per_face_normals.h>
@@ -18,6 +19,8 @@
 // represent the input to our objective functions which we will be minimizing.
 typedef dlib::matrix<double,0,1> column_vector;
 typedef Eigen::Array<bool,Eigen::Dynamic,1> VectorXb;
+
+static int GLOB_ROW_i;
 
 namespace {
 
@@ -72,13 +75,13 @@ class test_function_deriv {
     igl::invert_diag(M, Minv);
 
     // Get each derivative separately, then add them all up.
-    auto dL = deriv_dL(V,L,Minv),
+    auto dL = deriv_dL(V,_Fo,L,Minv),
          dV = deriv_dV(V,L,Minv),
          dM = deriv_dM(V,_Fo,L,Minv),
          dTh= deriv_dTheta(V,L,Minv);
-    //Eigen::MatrixXd dv = dL + dV + dM + dTh;
+    Eigen::MatrixXd dv = dL + dV + dM + dTh;
     // TESTING TESTING just set to dM
-    Eigen::MatrixXd dv = solo_dM(V,_Fo,L,Minv);
+    //Eigen::MatrixXd dv = solo_dM(V,_Fo,L,Minv);
 
     /*
     fprintf(stderr, "Just about to decompose L...\n");
@@ -114,13 +117,139 @@ class test_function_deriv {
   }
 
  private:
+  // Will get the next index and previous vertex index, and the zero-based
+  // index of the two in f.
+  void getNextPrev(const Eigen::RowVector3i &f, int idx,
+                   int &next, int &prev, int &sp, int &sm, int &s0,
+                   bool swap = false) const {
+    if (idx == f(0)) {
+      prev = f(2); next = f(1); 
+      sm = 2; sp = 1; s0 = 0;
+    } else if (idx == f(1)) {
+      prev = f(0); next = f(2); 
+      sm = 0; sp = 2; s0 = 1;
+    } else { // idx == f(2)
+      prev = f(1); next = f(0); 
+      sm = 1; sp = 0; s0 = 2;
+    }
+    // Need to do this to match derivatives of dM (why??)
+    if (swap) {
+      int temp = prev;
+      prev = next; next = temp;
+      temp = sm;
+      sm = sp;
+      sp = temp;
+    }
+  }
+  // Wrapper function.
+  void getNextPrev(const Eigen::RowVector3i &f, int idx,
+                   int &next, int &prev) const {
+    int sp, sm, s0;
+    getNextPrev(f,idx, next,prev, sp,sm,s0, true);
+
+  }
+
   const Eigen::MatrixXd deriv_dL(
       const Eigen::MatrixXd &V,
+      const Eigen::MatrixXi &F,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi) const {
-    // TODO
     Eigen::MatrixXd ret(V.rows(), 3);
     ret.setZero();
+
+    // Need to create mapping of vertex->face
+    std::vector<std::vector<int> > v2face;
+    v2face.resize(V.rows());
+
+    for (int i = 0; i < F.rows(); ++i) {
+      for (int j = 0; j < 3; ++j) {
+        v2face[F(i, j)].push_back(i);
+      }
+    }
+
+    // Also precompute face normals and area.
+    Eigen::MatrixXd n, F_2area;
+    igl::per_face_normals(V,F, n);
+    igl::doublearea(V,F, F_2area);
+
+    // Also decompose L into D^T\starD
+    Eigen::SparseMatrix<double> D, star;
+    decompose_L(V,F, D,star);
+
+    // And pre-compute some other matrices.
+    const Eigen::MatrixXd DMiLV = Eigen::MatrixXd(D * Mi * L * V);
+    const Eigen::MatrixXd DV = Eigen::MatrixXd(D * V);
+
+    // Then compute function
+    for (int i = 0; i < V.rows(); ++i) {
+      //fprintf(stderr, "Working on row %d\n", i);
+      // Three components for each face.
+      for (int fi : v2face[i]) {
+        //fprintf(stderr, "Working on f %d\n", fi);
+        const auto &f = F.row(fi);
+        const Eigen::Vector3d &fn = n.row(fi);
+        double Af = 0.5 * F_2area(fi);  // A(f)
+        double Af2 = Af * Af * 2.;      // 2 * A(f)^2
+        //fprintf(stderr, "Area is %lf\n", Af);
+
+        // Get next and prev indices.
+        int next, prev, sm, sp, s0;
+        getNextPrev(f, i, next, prev, sm, sp, s0);
+        //fprintf(stderr, "  verts are %d,%d %d,%d,%d\n",
+         //       prev,next, fi * 3 + sm,fi * 3 + s0,fi * 3 + sp);
+
+        // First component:
+        double m1 = DMiLV.row(fi * 3 + sp).dot(
+                              DV.row(fi * 3 + sp)); // s_plus
+        // (v_+ - v_-) / A(f)
+        auto v1_1 = (V.row(next) - V.row(prev)) / Af;
+        // (v_k - v_-) * (v_+ - v_-)
+        // ------------------------- (v_+ - v_-)
+        //         2 A(f)^2
+        Eigen::Vector3d v1_2a = 
+            ((V.row(i) - V.row(prev)) * 
+             (V.row(next) - V.row(prev)) / Af2) *
+            (V.row(next) - V.row(prev));
+        // Need to do some funky shit to get this to have correct dimensions.
+        Eigen::RowVector3d v1_2 = (v1_2a.transpose().cross(fn)).transpose();
+        Eigen::RowVector3d v1 = m1 * (v1_1 + v1_2);
+
+        // Second term
+        double m2 = DMiLV.row(fi * 3 + sm).dot(
+                              DV.row(fi * 3 + sm)); // s_minus
+        // (v_- - v_+) / A(f)
+        auto v2_1 = (V.row(prev) - V.row(next)) / Af;
+        // (v_k - v_+) * (v_- - v_+)
+        // ------------------------- (v_+ - v_-)
+        //         2 A(f)^2
+        Eigen::Vector3d v2_2a = 
+            ((V.row(i) - V.row(next)) * 
+             (V.row(prev) - V.row(next)) / Af2) *
+            (V.row(next) - V.row(prev));
+        Eigen::RowVector3d v2_2 = (v2_2a.transpose().cross(fn)).transpose();
+        Eigen::RowVector3d v2 = m2 * (v2_1 + v2_2);
+
+        // Third term.
+        double m3 = DMiLV.row(fi * 3 + s0).dot(
+                              DV.row(fi * 3 + s0)); // s_original
+        // (2v_k - v_+ - v_-) / A(f)
+        auto v3_1 = (V.row(i) - V.row(next) - V.row(prev)) / Af;
+        // (v_+ - v_k) * (v_- - v_k)
+        // ------------------------- (v_+ - v_-)
+        //         2 A(f)^2
+        Eigen::Vector3d v3_2a = 
+            ((V.row(next) - V.row(i)) * 
+             (V.row(prev) - V.row(i)) / Af2) *
+            (V.row(next) - V.row(prev));
+        Eigen::RowVector3d v3_2 = (v2_2a.transpose().cross(fn)).transpose();
+        Eigen::RowVector3d v3 = m2 * (v3_1 + v3_2);
+
+
+        // Total is sum of parts -- summed over all faces.
+        ret.row(i) += v1 + v2 + v3;
+      }
+    }
+
     return ret;
   }
 
@@ -130,7 +259,7 @@ class test_function_deriv {
       const Eigen::MatrixXd &V,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi) const {
-    return  4 * (L.transpose() * Mi * L * V).transpose();
+    return  4.0 * (L.transpose() * Mi * L * V).transpose();
   }
 
   Eigen::MatrixXd mat_cp(const Eigen::RowVector3d &v) const {
@@ -163,8 +292,10 @@ class test_function_deriv {
     // Also precompute face normals.
     Eigen::MatrixXd n;
     igl::per_face_normals(V,F, n);
+
+    // Then compute function.
     for (int i = 0; i < V.rows(); ++i) {
-      Eigen::RowVector3d dMii;
+      Eigen::Vector3d dMii;
       dMii << 0, 0, 0;
       // Look at each face that contains i
       for (int fi : v2face[i]) {
@@ -173,21 +304,16 @@ class test_function_deriv {
         // Then, look at the other two vertices attached to this face.
         // Compute next and prev vertices.
         int next, prev;
-        if (i == f(0)) {
-          prev = f(2); next = f(1); 
-        } else if (i == f(1)) {
-          prev = f(0); next = f(2); 
-        } else { // i == f(2)
-          prev = f(1); next = f(0); 
-        }
+        getNextPrev(f, i, next, prev);
 
         // Then compute the multiplier.
-        dMii += n.row(fi).transpose() * 
+        //dMii += n.row(fi).transpose() * 
+        dMii += n.row(fi) *
             ( mat_cp(V.row(i) - V.row(prev)) - 
               mat_cp(V.row(i) - V.row(next)) );
       }
 
-      ret.row(i) = dMii;
+      ret.row(i) = dMii.transpose();
     }
 
     return 1. / 6. * ret;
@@ -238,19 +364,16 @@ class test_function_deriv {
         // Then, look at the other two vertices attached to this face.
         // Compute next and prev vertices.
         int next, prev;
-        if (i == f(0)) {
-          prev = f(2); next = f(1); 
-        } else if (i == f(1)) {
-          prev = f(0); next = f(2); 
-        } else { // i == f(2)
-          prev = f(1); next = f(0); 
-        }
+        getNextPrev(f, i, next,prev);
 
         // Finally, compute the cross product with the face normal.
-        const Eigen::RowVector3d diff = V.row(next) - V.row(prev);
-        const Eigen::RowVector3d f_n = n.row(fi);
-        Eigen::RowVector3d dv = diff.cross(f_n);
-        ret.row(i) += mult * dv;
+        const Eigen::Vector3d diff = (V.row(next) - V.row(prev)).transpose();
+        const Eigen::Vector3d f_n = n.row(fi).transpose();
+        //Eigen::RowVector3d dv = diff.cross(f_n);
+        ret.row(i) += mult * diff.cross(f_n);
+        //ret(i, 0) += mult * 
+            //((V.row(next) - V.row(prev)).transpose().cross(
+                    //n.row(fi).transpose()));
       }
     }
 
@@ -338,15 +461,20 @@ class test_function {
     std::clock_t here_start = std::clock();
 
     Eigen::MatrixXd Vt = getFinalVerts(arg);
-    double en = biharmonic_energy(Vt, _Fo, _to_ignore);
 
     Eigen::SparseMatrix<double> M;
     igl::massmatrix(Vt,_Fo, igl::MASSMATRIX_TYPE_BARYCENTRIC, M);
-    double ret =  M.diagonal().sum();
-    return ret;
+    //double ret =  M.diagonal().sum();
+    //return M.coeffRef(GLOB_ROW_i, GLOB_ROW_i);
 
-    //printf("Inside function, value is %lf\n", en);
 
+    Eigen::SparseMatrix<double> Mi;
+    igl::invert_diag(M, Mi);
+    Eigen::SparseMatrix<double> L;
+    igl::cotmatrix(Vt, _Fo, L);
+    double en = (Vt.transpose() * L.transpose() * Mi * L * Vt).trace();
+
+    printf("Inside function, value is %lf\n", en);
     // Return the biharmonic energy of the two.
     //double en = biharmonic_energy(Vt, _Fo, _to_ignore);
     return en;
@@ -396,23 +524,52 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   printf("Created starting point, energy is %lf\n", tf(start));
   tf.print(start);
   printf("Number of dimensions is %ld\n", start.size());
+  /*
   auto ours = tf_dv(start);
+  GLOB_ROW_i = 163; // This one is bad, before.
+  std::cout << " working on " << GLOB_ROW_i << std::endl;
   auto approx_deriv = dlib::derivative(tf)(start);
+  for (int i = GLOB_ROW_i+1; i < V.rows(); ++i) {
+    bool same = true;
+    for (int j = 0; j < 3; ++j) {
+      if (approx_deriv((i-1) * 3 + j) -
+          ours((i-1) * 3 + j) > 1e-6) {
+        same = false;
+      }
+      printf("%lf ", approx_deriv((i-1) * 3 + j));
+    }
+    printf("vs");
+    for (int j = 0; j < 3; ++j) {
+      printf(" %lf", ours((i-1) * 3 + j));
+    }
+    printf("%s\n", same ? " :)" : "***");
+    std::cout << " working on " << i << std::endl;
+    GLOB_ROW_i = i;
+    start = tf.getStartingPoint();
+    approx_deriv = dlib::derivative(tf)(start);
+  }
   std::cout << "Difference between analytic derivative and numerical approximation of derivative: "
             << length(approx_deriv - ours) << std::endl;
   for (int i = 0; i < approx_deriv.size(); ++i) {
     printf("%c%9.6lf %9.6lf\n", i % 3 == 0 ? '*' : ' ', approx_deriv(i), ours(i));
   }
   //std::cout << approx_deriv << "\nAnd ours:\n" << ours << std::endl;
+  */
 
+  /*
   find_min_using_approximate_derivatives(
       //dlib::lbfgs_search_strategy(100),
       dlib::bfgs_search_strategy(),
       dlib::objective_delta_stop_strategy(1e-1).be_verbose(),
       tf, start, -1);
+      */
+  find_min(dlib::bfgs_search_strategy(),
+           dlib::objective_delta_stop_strategy(1e-1).be_verbose(),
+           tf, tf_dv, start, -1);
+
   printf("Finished approximate derivatives\n");
-  approx_deriv = dlib::derivative(tf)(start);
-  ours = tf_dv(start);
+  auto approx_deriv = dlib::derivative(tf)(start);
+  auto ours = tf_dv(start);
   for (int i = 0; i < approx_deriv.size(); ++i) {
     printf("%c%9.6lf %9.6lf\n", i % 3 == 0 ? '*' : ' ', approx_deriv(i), ours(i));
   }
