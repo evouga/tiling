@@ -151,6 +151,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+
   printf("Viewing before: %ld %ld %ld\n", V.rows(), F.rows(), C.rows());
   Helpers::viewTriMesh(V, F, C, false);
 

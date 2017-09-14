@@ -4,12 +4,18 @@
 
 #include <igl/cotmatrix_entries.h>
 
+/**
+ * Decompose L into D^T\star D.
+ *
+ * @param V - vertices of mesh
+ * @param F - faces of mesh
+ */
 void decompose_L(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                  Eigen::SparseMatrix<double> &D, Eigen::SparseMatrix<double> &star) {
   // Construct D
   D.resize(F.rows() * 3, V.rows());
-  //          # edges   # non-zeros per edge   
-  D.reserve(Eigen::VectorXi::Constant(V.rows(), 2));
+  //                                 # non-zeros per vertex
+  D.reserve(Eigen::VectorXi::Constant(2, V.rows()));
   //D.reserve(F.rows()*3 * 2);
   for (int i = 0; i < F.rows(); ++i) {
     for (int j = 0; j < 3; ++j) {
@@ -35,6 +41,7 @@ void decompose_L(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       star.coeffRef(e, e) -= cot_entries(i, (j + 2) % 3);
     }
   }
+
   //fprintf(stderr, "D is %ld,%ld and star is %ld,%ld\nFinished with matrix\n",
   //        D.rows(), D.cols(), star.rows(), star.cols());
 }

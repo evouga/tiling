@@ -423,7 +423,7 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
         M_next = O_biharmonic;
       }
       printf("Finished minimization: %lf\n", en);
-      set_viewer(viewer, V_next, F_next, M_next);
+      set_viewer_with_color(viewer, V_next, F_next, (V_biharmonic - V_next).rowwise().squaredNorm());
       V_biharmonic = V_next;
       F_biharmonic = F_next;
     }
