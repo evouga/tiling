@@ -68,6 +68,9 @@ bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A);
 void writeMeshWithMarkers(const char* fn,
                           const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, 
                           const Eigen::VectorXi &M);
+void writeMeshWithMarkers(const char* fn,
+                          const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, 
+                          const std::vector<int> *to_ignore /* can be null */);
 } // namespace Helpers
 
 #endif // HELPERS_H

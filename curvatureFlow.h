@@ -17,7 +17,7 @@ double biharmonic_new(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                       const Eigen::VectorXi &O,
                       Eigen::MatrixXd &Vc, Eigen::MatrixXi &Fc,
                       Eigen::VectorXi &Mc, std::vector<int> *new_vertices=NULL,
-                      bool do_min = false);
+                      bool do_min = true);
 
 // Given some input mesh V,F, produce an output Vc
 // Also includes a flag to remove any interior "original" markers, so the

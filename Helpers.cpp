@@ -424,6 +424,7 @@ void viewTriMesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
       }
       printf("Finished minimization: %lf\n", en);
       set_viewer_with_color(viewer, V_next, F_next, (V_biharmonic - V_next).rowwise().squaredNorm());
+      //cout << (V_biharmonic - V_next).rowwise().squaredNorm();
       V_biharmonic = V_next;
       F_biharmonic = F_next;
     }
@@ -716,6 +717,20 @@ bool sparseMatrixHasNaN(const Eigen::SparseMatrix<double> &A) {
   return false;
 }
 
+void writeMeshWithMarkers(const char* fn,
+                          const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                          const std::vector<int> *to_ignore) {
+  Eigen::VectorXi M;
+  M.resize(V.rows());
+  M.setConstant(GLOBAL::nonoriginal_marker);
+  if (to_ignore) {
+    for (int i : *to_ignore) {
+      M(i) = GLOBAL::original_marker;
+    }
+  }
+
+  writeMeshWithMarkers(fn,V,F, M);
+}
 void writeMeshWithMarkers(const char* fn,
                           const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                           const Eigen::VectorXi &M) {

@@ -11,7 +11,8 @@
 #include <igl/per_face_normals.h>
 
 #include "curvatureFlow.h"
-#include "decompose_L.h"
+#include "Derivatives.h"
+#include "Helpers.h"
 
 // In dlib, the general purpose solvers optimize functions that take a column
 // vector as input and return a double.  So here we make a typedef for a
@@ -54,10 +55,6 @@ class test_function_deriv {
         _v2face[F(i, j)].push_back(i);
       }
     }
-
-    // Construct _uE and _EMAP
-    Eigen::MatrixXi E, uE2E; // Don't care about these.
-    //igl::unique_edge_map(F, E, _uE, _EMAP, uE2E);
   }
 
   // This will return the derivative of the energy function, given the input
@@ -65,7 +62,7 @@ class test_function_deriv {
   //const column_vector deriv(const column_vector& arg) const {
   const column_vector operator()(const column_vector& arg) const {
     // Compute these matrices first; make sure it's in row-major order!!
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> V = _Vo;
+    RowMatrixXd V = _Vo;
     // Need to get this special (full) matrix.
     int mov_idx = 0;
     for (int i = 0; i < V.rows(); ++i) {
@@ -94,7 +91,7 @@ class test_function_deriv {
          dV = deriv_dV(V,L,Minv),
          dM = deriv_dM(V,_Fo,L,Minv),
          dTh= deriv_dTheta(V,L,Minv);
-    Eigen::MatrixXd dv = dL + dV + dM + dTh;
+    RowMatrixXd dv = dL + dV + dM + dTh;
     /*
     std::cout << "dL: " << dL.colwise().minCoeff()
                    << " max " << dL.colwise().maxCoeff() << std::endl;
@@ -174,23 +171,23 @@ class test_function_deriv {
 
   }
 
-  const Eigen::MatrixXd deriv_dL(
-      const Eigen::MatrixXd &V,
-      const Eigen::MatrixXi &F,
+  const RowMatrixXd deriv_dL(
+      const RowMatrixXd &V,
+      const RowMatrixXi &F,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi) const {
-    Eigen::MatrixXd ret(V.rows(), 3);
+    RowMatrixXd ret(V.rows(), 3);
     ret.setZero();
 
     // Also precompute face normals and area.
-    Eigen::MatrixXd n, F_2area;
+    RowMatrixXd n, F_2area;
     igl::per_face_normals(V,F, n);
     igl::doublearea(V,F, F_2area);
     n = -n;
 
     // Also decompose L into D^T\starD
     Eigen::SparseMatrix<double> D, star;
-    decompose_L(V,F, D,star);
+    derivatives::decompose_L(V,F, D,star);
     
     // And pre-compute some other matrices.
     const RowMatrixXd DMiLV = D * Mi * L * V;
@@ -291,8 +288,8 @@ class test_function_deriv {
 
   // The contribution to the gradient $\nabla_{v_k} E$ is
   // $$4\left(L^{\intercal} M^{-1}L V\right)_k^T.$$
-  const Eigen::MatrixXd deriv_dV(
-      const Eigen::MatrixXd &V,
+  const RowMatrixXd deriv_dV(
+      const RowMatrixXd &V,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi) const {
     return  4.0 * (L.transpose() * Mi * L * V);
@@ -307,16 +304,16 @@ class test_function_deriv {
   }
 
   // Derivative of mass matrix (sanity check).
-  const Eigen::MatrixXd solo_dM(
-      const Eigen::MatrixXd &V,
-      const Eigen::MatrixXi &F,
+  const RowMatrixXd solo_dM(
+      const RowMatrixXd &V,
+      const RowMatrixXi &F,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi) const {
-    Eigen::MatrixXd ret(V.rows(), 3);
+    RowMatrixXd ret(V.rows(), 3);
     ret.setZero();
     
     // Also precompute face normals.
-    Eigen::MatrixXd n;
+    RowMatrixXd n;
     igl::per_face_normals(V,F, n);
     n = -n;
 
@@ -352,20 +349,20 @@ class test_function_deriv {
   //    $$\frac{1}{3}\sum_{f\supset v_k} 
   //          \left(\sum_{v_i\subset f} \|(M^{-1}LV)_i\|^2\right) 
   //                \left(v^f_+-v^f_-\right)\times\mathbf{n}_f.$$
-  const Eigen::MatrixXd deriv_dM(
-      const Eigen::Matrix<double, -1, -1, Eigen::RowMajor> &V,
-      const Eigen::MatrixXi &F,
+  const RowMatrixXd deriv_dM(
+      const RowMatrixXd &V,
+      const RowMatrixXi &F,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi, bool solo_dv = false) const {
     // Pre-compute this matrix.
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> milv = Mi * L * V;
+    RowMatrixXd milv = Mi * L * V;
 
     // Also precompute face normals.
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> n;
+    RowMatrixXd n;
     igl::per_face_normals(V,F, n);
 
     // Finally, compute the value.
-    Eigen::Matrix<double, -1, -1, Eigen::RowMajor> ret(V.rows(), 3);
+    RowMatrixXd ret(V.rows(), 3);
     ret.setZero(); // null it out.
     for (int i = 0; i < V.rows(); ++i) {
       // Look at each face that contains i
@@ -397,22 +394,22 @@ class test_function_deriv {
     return ret * -1. / 3;
   }
 
-  const Eigen::MatrixXd deriv_dTheta(
-      const Eigen::MatrixXd &V,
+  const RowMatrixXd deriv_dTheta(
+      const RowMatrixXd &V,
       const Eigen::SparseMatrix<double> &L,
       const Eigen::SparseMatrix<double> &Mi) const {
-    // TODO
-    Eigen::MatrixXd ret(V.rows(), 3);
-    ret.setZero();
-    return ret;
+    // Compute the edges.
+    RowMatrixXd ret;
+    double gc = derivatives::geodesicCurvature(V, _Fo, _to_ignore, &ret);
+    //printf("curvature: %lf\n", gc);
+    
+    return -ret;
   }
 
-  const Eigen::MatrixXd &_Vo; // Won't ever change.
-  const Eigen::MatrixXi &_Fo; // Won't ever change.
+  const RowMatrixXd _Vo; // Won't ever change.
+  const RowMatrixXi _Fo; // Won't ever change.
   const std::vector<int> *_to_ignore; // Won't ever change.
   std::vector<std::vector<int> > _v2face; // Won't ever change.
-  Eigen::MatrixXi _uE; // List of unique undirected edges.
-  Eigen::VectorXi _EMAP; // #F*3 mapping from F to _uE
   VectorXb _movable; // Won't ever change. Just indices.
   int _num_movable; // Number of mutable vertices.
 };
@@ -493,11 +490,11 @@ class test_function {
     igl::invert_diag(M, Mi);
     Eigen::SparseMatrix<double> L;
     igl::cotmatrix(Vt, _Fo, L);
-    double en = (Vt.transpose() * L.transpose() * Mi * L * Vt).trace();
+    //double en = (Vt.transpose() * L.transpose() * Mi * L * Vt).trace();
 
     //printf("Inside function, value is %lf\n", en);
     // Return the biharmonic energy of the two.
-    //double en = biharmonic_energy(Vt, _Fo, _to_ignore);
+    double en = biharmonic_energy(Vt, _Fo, _to_ignore);
     return en;
   }
 
@@ -524,8 +521,8 @@ class test_function {
   }
 
  private:
-  const Eigen::MatrixXd &_Vo; // Won't ever change.
-  const Eigen::MatrixXi &_Fo; // Won't ever change.
+  const RowMatrixXd _Vo; // Won't ever change.
+  const RowMatrixXi _Fo; // Won't ever change.
   const std::vector<int> *_to_ignore; // Won't ever change.
   VectorXb _movable; // Won't ever change. Just indices.
   int _num_movable; // Number of mutable vertices.
@@ -537,14 +534,15 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
                 const std::vector<int> *to_ignore /* can be null */,
                 Eigen::MatrixXd &minV) {
 
+  Helpers::writeMeshWithMarkers("before_min", V,F,to_ignore);
   printf("Starting minimize function...\n");
   test_function tf(V, F, to_ignore);
   test_function_deriv tf_dv(V, F, to_ignore);
   printf("Just initialized tf function\n");
   column_vector start = tf.getStartingPoint();
   printf("Created starting point, energy is %lf\n", tf(start));
-  tf.print(start);
-  printf("Number of dimensions is %ld\n", start.size());
+  //tf.print(start);
+  printf("Number of verts is %ld and dimensions is %ld\n", V.rows(), start.size());
   /*
   auto ours = tf_dv(start);
   GLOB_ROW_i = 0; // This one is bad, before.
@@ -576,24 +574,28 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   }
   //std::cout << approx_deriv << "\nAnd ours:\n" << ours << std::endl;
   */
-  /*
+  /* Uses dlib's approximate derivatives (SLOW)
   find_min_using_approximate_derivatives(
       //dlib::lbfgs_search_strategy(100),
       dlib::bfgs_search_strategy(),
       dlib::objective_delta_stop_strategy(1e-3).be_verbose(),
       tf, start, -1);
       */
-  /* This uses our gradient. */
-  /*
+  /* This uses our gradient with dlib solvers. */
   find_min(dlib::bfgs_search_strategy(),
-           dlib::objective_delta_stop_strategy(1e-1).be_verbose(),
+           dlib::objective_delta_stop_strategy(1e-3).be_verbose(),
            tf, tf_dv, start, -1);
+  /*
+   * This prints out the comparison of our gradient with that of dlib (SLOW).
   auto approx_deriv = dlib::derivative(tf)(start);
   auto ours = tf_dv(start);
   for (int i = 0; i < approx_deriv.size(); ++i) {
     printf("%c%9.6lf %9.6lf\n", i % 3 == 0 ? '*' : ' ', approx_deriv(i), ours(i));
   }
-           */
+  */
+  /**
+   * This will use our derivative and a hacky minimization ("better" than dlib in
+   * some cases, but also prone to over-fitting).
   double en = tf(start);
   double en2 = en;
   auto dv = tf_dv(start);
@@ -617,8 +619,9 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
     printf("Switching back to prev\n");
     start = prev;
   }
+  */
 
-  /*
+  /* Some debug informtion to compare our derivatives with dlib's.
   auto approx_deriv_final = dlib::derivative(tf)(start);
   auto ours_final = tf_dv(start);
   for (int i = 0; i < approx_deriv_final.size(); ++i) {
@@ -630,6 +633,17 @@ double minimize(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
   printf("Finished approximate derivatives\n");
 
   minV = tf.getFinalVerts(start);
+  std::set<int> ignor_pts(to_ignore->begin(), to_ignore->end());
+  int i = -1;
+  while (ignor_pts.find(++i) != ignor_pts.end());
+  double minZ = minV(i, 2), maxZ = minV(i, 2);
+  for (; i < minV.rows(); ++i) {
+    if (ignor_pts.find(i) != ignor_pts.end()) continue;
+    maxZ = std::max(maxZ, V(i, 2));
+    minZ = std::min(minZ, V(i, 2));
+  }
+  printf("Max is %lf and min is %lf\n", maxZ, minZ);
   printf("got final value (energy is %lf, vert diffs to follow)\n", tf(start));
+  Helpers::writeMeshWithMarkers("after_min", minV,F,to_ignore);
   return tf(start);
 }
